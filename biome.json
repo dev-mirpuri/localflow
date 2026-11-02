@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**/*.ts", "**/*.tsx", "!app/src/api/generated"]
+    "includes": ["**/*.ts", "**/*.tsx", "**/*.json", "**/*.css", "!app/src/api/generated"]
   },
   "formatter": {
     "enabled": true,

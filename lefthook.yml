@@ -14,7 +14,7 @@ pre-commit:
       glob: "engine/src/**/*.py"
       run: uv run pyright {staged_files}
     - name: biome
-      glob: "*.{ts,tsx}"
+      glob: "*.{ts,tsx,json,css}"
       run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
 
 pre-push:
