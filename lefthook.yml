@@ -16,3 +16,12 @@ pre-commit:
     - name: biome
       glob: "*.{ts,tsx}"
       run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
+
+pre-push:
+  jobs:
+    - name: guard push
+      # {files} is deliberate: without it, lefthook skips this job when a push
+      # has no changed files, such as a branch deletion. The script ignores it.
+      run: uv run --no-project scripts/guard_push.py {files}
+      use_stdin: true
+      files: git ls-files lefthook.yml
