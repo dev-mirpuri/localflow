@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+*.log
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Rust / Tauri
+target/
+app/src-tauri/gen/schemas/
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Local
+.env
+.claude/settings.local.json

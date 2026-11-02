@@ -1,0 +1,18 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: ruff check
+      root: engine/
+      glob: "*.py"
+      run: uv run ruff check --force-exclude {staged_files}
+    - name: ruff format
+      root: engine/
+      glob: "*.py"
+      run: uv run ruff format --check --force-exclude {staged_files}
+    - name: pyright
+      root: engine/
+      glob: "engine/src/**/*.py"
+      run: uv run pyright {staged_files}
+    - name: biome
+      glob: "*.{ts,tsx}"
+      run: pnpm exec biome check --no-errors-on-unmatched {staged_files}
