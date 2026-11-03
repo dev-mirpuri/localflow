@@ -23,11 +23,9 @@ jobs:
         working-directory: engine
         run: uv sync --locked
       - name: ruff check
-        working-directory: engine
-        run: uv run ruff check .
+        run: uv run --project engine ruff check engine eval
       - name: ruff format
-        working-directory: engine
-        run: uv run ruff format --check .
+        run: uv run --project engine ruff format --check engine eval
       - name: pytest
         working-directory: engine
         run: uv run pytest -q -m "not gpu and not windows"

@@ -24,8 +24,8 @@ Run the engine commands from `engine/`:
 
 | Task | Command |
 |---|---|
-| Lint | `uv run ruff check .` |
-| Format | `uv run ruff format .` |
+| Lint | `uv run ruff check . ../eval` |
+| Format | `uv run ruff format . ../eval` |
 | Test (default, skips GPU and Windows-input tests) | `uv run pytest` |
 | Test (GPU only) | `uv run pytest -m gpu` |
 | Test (Windows input only) | `uv run pytest -m windows` |

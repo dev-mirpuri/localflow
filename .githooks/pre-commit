@@ -2,9 +2,11 @@
 # Enabled with: git config core.hooksPath .githooks
 set -e
 
-cd "$(git rev-parse --show-toplevel)/engine"
-uv run ruff check .
-uv run ruff format --check .
+cd "$(git rev-parse --show-toplevel)"
+uv run --project engine ruff check engine eval
+uv run --project engine ruff format --check engine eval
+
+cd engine
 uv run pytest -q -m "not gpu and not windows"
 
 cd ../app

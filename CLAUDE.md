@@ -36,10 +36,10 @@ git config core.hooksPath .githooks
 From `engine/`:
 
 ```powershell
-uv run ruff check .      # lint
-uv run ruff format .     # format
-uv run pytest            # test, skipping GPU and Windows-input tests
-uv run pytest -m gpu     # GPU tests only; -m windows for Windows-input tests
+uv run ruff check . ../eval    # lint
+uv run ruff format . ../eval   # format
+uv run pytest                  # test, skipping GPU and Windows-input tests
+uv run pytest -m gpu           # GPU tests only; -m windows for Windows-input tests
 ```
 
 From `app/`:
