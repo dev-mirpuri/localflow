@@ -2,244 +2,224 @@
 
 > Working name. A free, fully local, English-only take on Wispr Flow for Windows.
 > This brief is the source of truth for **scope and design**. The day-by-day plan (commands, routines, timings) is the separate "LocalFlow build roadmap". When an ADR in `docs/adr/` changes a decision here, update this file and link the ADR.
+> **Simplicity is the top requirement.** If something isn't in section 2, it doesn't get built.
 
 ## 1. What it is
 
-Press a hotkey in any app where you can type, speak, and clean, punctuated text appears at your cursor. Speech recognition and cleanup both run on my own PC, with no cloud and no subscription. Opening the app shows a polished window with the history of everything I've dictated.
+Press a hotkey in any app where you can type (a terminal, Claude Code, Slack, a browser, anything), speak, and clean, punctuated text appears at your cursor. Speech recognition and cleanup both run on my own PC, with no cloud, no account and no subscription. A small oval at the bottom of the screen shows when it's listening. Opening the app shows everything I've dictated, so I can copy anything I said before.
 
 **My machine:** Windows, AMD Ryzen 5 3600, NVIDIA RTX 2060 (6 GB VRAM).
+**What I know:** Python (FastAPI, pandas, pytest), TypeScript/JavaScript, React, Tailwind, HTML/CSS, SQL. No Rust. Electron is new to me but it's just JavaScript and HTML.
 
-## 2. Core features (v1 — this is the whole product for now)
+## 2. Core features (v1 — this is the whole product)
 
-1. **Dictate anywhere.** Global hotkey works in every app with a text field.
-   - **Hold** the hotkey → push-to-talk; release to finish.
-   - **Double-tap** the hotkey → hands-free mode; tap again (or click ✓ on the pill) to finish.
-   - **Esc** cancels and discards that recording.
-2. **Local speech recognition.** NVIDIA Parakeet (English) on the GPU.
-3. **Local cleanup.** A small local LLM removes filler words, fixes punctuation and capitalisation, resolves self-corrections ("at 3, no, 4pm" → "at 4pm"), and formats spoken lists. It must never answer or act on what I said — it only rewrites it.
-4. **Text lands at the cursor** of whatever app was focused.
-5. **Floating pill overlay** appears while dictating: live waveform while listening, a processing state, a brief success tick, a clear error state. It never steals focus.
-6. **The app (Hub window)** with a home screen showing my dictation history, a few headline stats and settings.
-7. **Tray icon** with Open / Pause / Quit. Launch at login.
-8. **Light, dark and system themes.**
+1. **Dictate anywhere** with one global hotkey:
+   - **Hold** → push-to-talk; release to finish.
+   - **Double-tap** → hands-free; tap again, or click ✓ on the oval, to finish.
+   - **Esc** (or ✕ on the oval) cancels and discards that recording.
+2. **Speech recognition** with NVIDIA Parakeet (English) on the GPU.
+3. **Cleanup** with a small local model through Ollama: remove filler words, fix punctuation and capitals, resolve self-corrections ("at 3, no, 4pm" → "at 4pm"), format spoken lists. It must never answer or act on what I said — it only rewrites it. If cleanup fails, paste the raw text.
+4. **Paste at the cursor** of whatever app was focused, then put my clipboard back.
+5. **The oval**: appears at the bottom centre of the main screen while dictating — moving level bars while listening, ✕ and ✓ buttons in hands-free mode, dots while processing, a short message on error. It never takes focus from the app I'm typing in.
+6. **History window**: every dictation, newest first, grouped by day, each with a copy button and a delete button, plus a search box.
+7. **Tray icon**: Open history, Quit. Closing the history window hides it; the app keeps running.
+8. **Config file** for the hotkey, microphone, cleanup model and launch at login. No settings screen.
 
-### Explicitly NOT in v1 (later ideas — do not build, do not design around them yet)
+### Explicitly NOT in v1 (do not build, do not design around)
 
-Personal dictionary, snippets, per-app styles/tones, scratchpad/notes, command mode ("make this more formal"), audio playback of past dictations, insights page (heatmap, leaderboard, "your voice"), multiple languages, mobile, meeting notes, cloud sync, the public web demo / live link.
+Login or accounts; settings screen; stats, streaks or greetings; themes (one look only); showing the raw transcript; following the cursor across monitors; first-run wizard; personal dictionary; snippets; per-app tone; command mode; audio playback; multiple languages; mobile; cloud sync; auto-update; the public web demo / live link.
 
-The one exception: keep the speech + cleanup engine behind a local HTTP API (section 4) so a web demo can reuse it later without a rewrite.
+## 3. Reference: how Wispr Flow does it
 
-## 3. How Wispr Flow does the UI (reference, not a spec to copy)
+- A main window (the "Hub") with a searchable history grouped by date; hovering an entry shows copy.
+- The "Flow Bar": a small floating pill at the bottom of the screen that shows recording and processing, with cancel and confirm buttons.
+- Hold the hotkey to talk; double-tap it for hands-free; Esc cancels.
+- Cleanup runs on fine-tuned Llama models on cloud GPUs. Ours runs a 3–4B model on my GPU, so it handles light cleanup well but isn't as strong at heavy rewording.
 
-From Wispr's own help docs:
-
-- **Hub window** with a left sidebar: Home (default), Dictionary and Snippets, with Settings and Help pinned at the bottom.
-- **Home** greets you by first name, shows usage stats (word count, your shortcut), and a **transcript history grouped by date and searchable**. Hovering an entry reveals copy and flag actions.
-- **Flow Bar**: a small floating bubble showing dictation status with resting, recording and processing states. It follows the display your cursor is on, stays clear of the taskbar, and has cancel and confirm buttons. Right-click when resting → "Hide for 1 hour".
-- **Hotkeys**: hold the push-to-talk key; double-tap it to toggle hands-free; Esc cancels.
-- **Settings**: General (shortcuts, microphone, languages), System (launch at login, Flow Bar visibility, notifications), Account, Data & Privacy.
-- **Themes**: Light, Dark, or System.
-- **Insights** (later for us): words per minute, total words, fixes made, top apps, daily streak heatmap.
-
-Sources: docs.wisprflow.ai — "Navigating the Wispr Flow App", "Move and Dock the Flow Bar on Desktop", "Your Usage tab"; wisprflow.ai/whats-new.
+Sources: docs.wisprflow.ai ("Navigating the Wispr Flow App", "Move and Dock the Flow Bar on Desktop"); wisprflow.ai/whats-new; baseten.co/customers/wispr-flow.
 
 ## 4. Architecture
 
-Two processes. The Python **engine** does all the real work; the **app shell** is purely the UI.
+Two parts, in the two languages I know. Electron starts the Python engine and talks to it by sending JSON lines through the engine's standard input and output. There is no web server, no port and no token, so nothing else on the PC can reach the engine.
 
 ```
-┌──────────────────────────────── Tauri 2 app shell ─────────────────────────────┐
-│  Hub window (React + TS + Tailwind + shadcn/ui)   Overlay pill window   Tray     │
-│            │  REST (history, settings, stats)          │ WebSocket (live state)  │
-└────────────┼───────────────────────────────────────────┼──────────────────────┘
-             ▼                                           ▼
-┌──────────────────────── Python engine (sidecar, 127.0.0.1 only) ───────────────┐
-│ Global hotkey ─► Mic capture ─► Parakeet (GPU) ─► Ollama cleanup ─► Paste       │
-│      (hold / double-tap)          raw text           clean text      at cursor  │
-│                                   └─────────────► SQLite history ◄────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────── Electron app (TypeScript + React + Tailwind) ────────────────┐
+│  main process: tray, history window, oval window, starts the engine           │
+│  renderer: history page, oval page (React + Tailwind)                          │
+└───────────────────────────── stdin / stdout (JSON lines) ─────────────────────┘
+                                        │
+┌──────────────────────────── Python engine (one package) ──────────────────────┐
+│ hotkey ─► record mic ─► Parakeet (GPU) ─► Ollama cleanup ─► paste at cursor   │
+│                                   └──────────► SQLite history                  │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
-
-**Why this split:** Python has the best local ML tooling and solid Windows hotkey/paste libraries; web tech gives the best-looking UI; and the engine's API is exactly what a future web demo needs.
 
 Choices marked **(spike)** are provisional until their spike in section 7 records an ADR.
 
-### Engine (Python 3.12, managed with uv)
+### Python engine (Python 3.12, managed with uv)
 
-| Concern | Choice | Notes |
+| Part | Choice | Notes |
 |---|---|---|
-| API | FastAPI + uvicorn, bound to `127.0.0.1` on a free port | A random token, passed by the app on every call, so other programs on the PC can't read history. REST for history/settings/stats, one WebSocket for live events |
-| Hotkey | `keyboard` (or `pynput`) global hook **(spike)** | Needs key-down *and* key-up for hold vs double-tap; ignore key auto-repeat |
-| Audio | `sounddevice`, 16 kHz mono float32 | Stream RMS level to the overlay ~20×/sec for the waveform |
-| Speech | Parakeet TDT 0.6B v2 (English-only) on CUDA via `onnx-asr` **(spike)** | Spike also tries v3. Fallback: `faster-whisper` with `distil-large-v3` |
-| Cleanup | Ollama; candidates `qwen3:4b`, `qwen3:1.7b`, `llama3.2:3b` **(spike)** | Pass `"think": false` for Qwen3; `keep_alive: -1` so it stays loaded; warm up both models at startup |
-| Paste | Save clipboard → set text → Ctrl+V → restore clipboard | Per-app fallback (typed input) for apps where Ctrl+V fails **(spike)**. Can't paste into apps running as admin — show a friendly error |
-| Context | Foreground window title + process name (Win32 via `ctypes`) | Stored with each history entry only. Using it to change tone per app is a later feature |
-| Storage | SQLite in `%APPDATA%\LocalFlow` | Numbered migration files from the first version. The LocalFlow Dev build uses `%APPDATA%\LocalFlow Dev` |
+| Hotkey | `keyboard` library **(spike)** | Needs key-down and key-up; ignore auto-repeat |
+| Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars |
+| Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA **(spike)** | Fallback: `faster-whisper` with `distil-large-v3` |
+| Cleanup | `ollama` Python package; candidates `qwen3:4b`, `qwen3:1.7b`, `llama3.2:3b` **(spike)** | `think=False` for Qwen3; `keep_alive=-1`; warm both models up at start |
+| Paste | Save clipboard → set text → Ctrl+V → restore clipboard **(spike)** | Admin windows can't be pasted into; show a short error |
+| App name | Foreground window's process name (Win32 via `ctypes`) | Shown in history only |
+| History | `sqlite3` (standard library) | One table, see below |
 
-**Hotkey state machine (design defaults; spike S3 sets the final key and timings):**
-- Key down → start recording immediately (no perceived lag).
-- Released after ≥ 250 ms → push-to-talk finished → process.
-- Released before 250 ms → wait up to 350 ms for a second tap. Second tap → hands-free (keep recording). No second tap → discard (accidental tap).
-- In hands-free, the next tap finishes. Esc cancels in any state.
-- Recordings shorter than ~0.3 s or silent → discard without calling the models.
-- Default hotkey: something unlikely to clash with other apps (Right Ctrl or Ctrl+Win are the candidates); configurable.
+**Hotkey rules (defaults; spike S2 sets the final key and timings):**
+- Key down → start recording at once.
+- Released after ≥ 250 ms → push-to-talk done → process.
+- Released before 250 ms → wait up to 350 ms for a second tap. Second tap → hands-free. No second tap → discard.
+- In hands-free, the next tap (or ✓) finishes. Esc (or ✕) cancels in any state.
+- Under ~0.3 s or silent → discard without calling the models.
+- Default key: Right Ctrl or Ctrl+Win, whichever misfires less in the spike.
 
-**Cleanup guardrails:**
-- Wrap the transcript in tags in the prompt; instruct "output only the cleaned text".
-- If the LLM errors, times out (~3 s), or returns something wildly different in length from the input, paste the **raw** transcript instead. Never lose what I said.
-- Skip the LLM for very short utterances (≤ 3 words) — just capitalise and punctuate.
-- **Eval set:** 30 recorded utterances in `eval/audio/` with ideal output in `eval/cases.jsonl` (plain, fillers, self-corrections, lists, questions/commands that must not be obeyed, technical words). `uv run --project engine eval` scores cleanup against it and must pass before any change to the prompt or model is merged.
+**Cleanup rules:**
+- Transcript wrapped in tags; the prompt says "output only the cleaned text".
+- On error, a ~3 s timeout, or output wildly different in length from the input → paste the raw transcript.
+- 3 words or fewer → skip the model; just capitalise and punctuate.
 
-**WebSocket events (engine → UI):** `state` (`idle | listening | processing | done | error | cancelled`), `level` (0–1 audio level), `result` (history entry), `error` (message).
+**Protocol** (one JSON object per line; stdout carries only protocol messages — all logging goes to stderr and a log file):
+- Engine → app: `{"type":"state","state":"idle|listening|handsfree|processing|done|error|cancelled"}`, `{"type":"level","value":0.42}`, `{"type":"result","entry":{…}}`, `{"type":"error","message":"…"}`, `{"type":"reply","id":3,"data":…}`.
+- App → engine: `{"type":"request","id":3,"method":"list_history","params":{"query":"","limit":200}}`, `{"type":"request","id":4,"method":"delete_entry","params":{"id":12}}`, `{"type":"command","name":"finish|cancel"}`.
 
-**REST:** `GET /history?q=&cursor=`, `DELETE /history/{id}`, `GET /stats`, `GET/PUT /settings`, `GET /health` (models loaded, GPU detected, Ollama reachable).
+**History table:** `id, created_at, raw_text, clean_text, app_name, status (ok | raw_fallback)`.
 
-**One contract:** every request, response and event is a Pydantic model. Export the OpenAPI and JSON schemas and generate TypeScript types into `app/src/api/generated/` with `openapi-typescript`. CI fails if the generated types are out of date; nobody edits them by hand.
+**Data folder:** `%APPDATA%\LocalFlow` (history, `config.json`, logs). When running from source (`npm run dev`), use `%APPDATA%\LocalFlow Dev`, so testing never touches real history.
 
-**History schema:** `id, created_at, raw_text, clean_text, app_name, window_title, duration_ms, word_count, stt_ms, llm_ms, status (ok | raw_fallback | failed)`.
+### Electron app (TypeScript, scaffolded with electron-vite's `react-ts` template)
 
-### App shell (Tauri 2 + React + TypeScript + Vite + Tailwind + shadcn/ui)
+- **Main process:** creates the tray, the history window and the oval window; starts the engine (`uv run` in development, the bundled exe when installed); forwards engine messages to the windows and requests back.
+- **Preload:** exposes one small `window.localflow` object (`onEvent`, `request`, `command`, `copy`) through `contextBridge`. No Node access in the pages.
+- **Oval window:** frameless, `transparent: true`, `focusable: false`, always on top at the `screen-saver` level, shown with `showInactive()`, click-through (`setIgnoreMouseEvents`) except while the ✕/✓ buttons are visible. Built exactly the way spike S3 proved.
+- **History window:** an ordinary window; closing hides it.
+- **Fake bridge:** when the pages run in a normal browser (no `window.localflow`), they use sample data and cycle the oval's states. This is how Playwright screenshots the UI. Keep it under ~60 lines, and list both pages' dev-server URLs in the README.
+- **Launch at login:** `app.setLoginItemSettings` from the config value.
 
-- Starts the Python engine as a sidecar (in development via `uv run`, in production a bundled exe) and shows a health screen if `/health` reports problems (no GPU, Ollama not running, model missing).
-- **Mock engine mode:** `pnpm --dir app dev:mock` runs the React UI in a normal browser against a fake API with scripted events. This is how Playwright, the ui-reviewer agent and impeccable see the screens, so it's built before the screens.
-- **Hub window** — see section 5.
-- **Overlay window** — transparent, undecorated, always-on-top, skip taskbar, not focusable, click-through except over its buttons. Built exactly the way spike S1 proved.
-- **Tray** — Open, Pause dictation, Quit. Launch at login via the Tauri autostart plugin.
-- Electron is the fallback only if spike S1 shows Tauri's overlay can't be made non-focus-stealing.
+**Later, for a web demo:** wrap the engine's `transcribe()` and `clean()` functions in a small FastAPI app. They don't change, so nothing built now is wasted.
 
-## 5. UI/UX spec
+## 5. UI spec
 
-Overall: calm, fast, premium desktop utility — think Wispr Flow, Raycast, Linear. Not a generic dashboard. Typography and spacing do the heavy lifting; colour is used sparingly. Every interaction should feel instant (optimistic UI, 150–200 ms ease-out transitions, springy pill).
+Calm, fast and clean, like Wispr Flow, Raycast or Linear. One look, no themes. Typography and spacing do the work; colour is used sparingly. The chosen direction is recorded in `PRODUCT.md` and `DESIGN.md` at the repo root (written with impeccable on day 5); those files decide colours, type, spacing and motion, and this section decides what's on each screen.
 
-The chosen visual direction is recorded in `PRODUCT.md` and `DESIGN.md` at the repo root (written with impeccable on days 7–8). Those files win over this section on colours, type, spacing and motion; this section defines what's on each screen.
+**History window**
+- Search box at the top.
+- Entries newest first, grouped under Today / Yesterday / date.
+- Each entry: the cleaned text (two lines, click to expand), time, the app it went into, a copy button (shows "Copied" briefly) and a delete button. Raw-fallback entries get a small "uncleaned" tag.
+- Empty state: one line teaching the hotkey ("Hold Right Ctrl and speak").
 
-**Hub window**
-- Left sidebar: Home; Settings and Help pinned at the bottom.
-- **Home**
-  - Greeting ("Good afternoon, [name]") and a one-line hint showing the current hotkey.
-  - Stats strip: words today, total words, average words per minute, current daily streak.
-  - History list grouped by **Today / Yesterday / date**, newest first, infinite scroll, instant search.
-  - Each entry: clean text (2-line clamp, expand on click), time, app it was dictated into.
-  - Hover actions: copy, show raw transcript, delete. Entries that fell back to raw text get a subtle badge.
-  - Empty state that teaches the hotkey with a small animated demo.
-- **Settings**: hotkey (record-a-shortcut field with live hint), microphone picker with live level meter, cleanup on/off, LLM model, launch at login, show overlay when idle, theme, clear history, open data folder.
-
-**Overlay pill**
-- Sits bottom-centre above the taskbar on the display the cursor is on.
-- **Resting** (optional, off by default): a tiny, low-opacity pill.
-- **Listening**: expands smoothly; live waveform bars driven by the `level` events.
-- **Hands-free**: same as listening plus ✕ (cancel) and ✓ (finish) buttons.
-- **Processing**: waveform settles into a shimmer or pulsing dots.
-- **Done**: brief tick, then collapses. **Error**: short red message (e.g. "Ollama isn't running"), auto-dismiss.
-- Must never take keyboard focus from the app I'm dictating into.
+**The oval**
+- Bottom centre of the main screen, just above the taskbar.
+- Listening: level bars that move with my voice.
+- Hands-free: the same, plus ✕ and ✓.
+- Processing: the bars settle into pulsing dots.
+- Done: disappears. Error: one short line (e.g. "Ollama isn't running"), then disappears.
 
 ## 6. Targets
 
-- Release-to-text ≤ ~1.5 s for one or two sentences on the RTX 2060 (checked at the median and 95th percentile from history timings).
+- Release-to-text ≤ ~1.5 s for one or two sentences (timings written to the log).
 - VRAM ≤ ~5 GB with both models loaded.
-- Zero lost dictations: every recording I finish ends up in history, even if cleanup, paste or the engine fails. (Esc, accidental taps and silent clips are deliberately discarded.)
-- Fresh Windows account: download to first dictation in under 10 minutes.
+- Nothing I finish saying is lost: if cleanup fails, the raw text is pasted and saved. (Esc, accidental taps and silent clips are deliberately discarded.)
+- Small codebase: aim for under ~2,000 lines including tests, not counting the generated template.
 
-## 7. Spikes (settled on the wayfinder map before any real code)
+## 7. Spikes (before any real code)
 
-Each is a throwaway prototype in `spikes/`, timeboxed, and ends in an ADR with measured numbers. Spike code is never imported by real code.
+Throwaway prototypes in `spikes/`, half a day each, each ending in an ADR with measured numbers. Spike code is never imported by real code.
 
 | Spike | Question | Pass bar | If it fails |
 |---|---|---|---|
-| S1 Overlay focus | Can a Tauri window appear, animate and take a click without stealing focus from Notepad? | Typing keeps landing in Notepad 20 times out of 20 | Win32 no-activate / tool-window styles from Rust; then an Electron overlay |
-| S2 Speech on GPU | Does Parakeet run on CUDA on this PC, and how fast? | Under 0.5 s per 10 s of speech, on the eval clips | faster-whisper with `distil-large-v3` |
-| S3 Hotkey feel | Do hold and double-tap feel right with the default key and timings? | No misfires in 50 mixed presses | Change the key or thresholds |
-| S4 Paste matrix | Does clipboard paste work in Notepad, Chrome, VS Code, Slack, Windows Terminal, Word and an admin window? | All except the admin window | Typed input as a per-app fallback |
-| S5 Cleanup model and prompt | Which candidate model and prompt clean the eval set best? | Never answers or obeys what was said; under 0.8 s per clip | Prompt changes, or a bigger or smaller model |
-| S6 Visual direction | Which of three rendered directions for Home and the pill? | One chosen, written to PRODUCT.md and DESIGN.md | Combine directions |
+| S1 Models | Do Parakeet and the cleanup candidates run fast enough on this PC, and which cleans best? | Parakeet under 0.5 s per 10 s of speech; cleanup never answers or obeys the eval clips, under 0.8 s each | faster-whisper; a different cleanup model or prompt |
+| S2 Hotkey and paste | Do hold and double-tap feel right, and does paste work everywhere I type? | No misfires in 50 mixed presses; paste works in Notepad, Chrome, VS Code, Slack, Windows Terminal and Claude Code | Change key or timings; typed input for apps where Ctrl+V fails |
+| S3 Oval focus | Can an Electron window appear, animate and take a click without stealing focus from Notepad? | Typing keeps landing in Notepad 20 times out of 20 | Draw the oval from Python with tkinter instead |
 
-## 8. Milestones and build order (tracer bullets — each ticket ends with something that runs)
+## 8. Tickets and milestones
 
-| Milestone | Done when | Tickets (approximate; `/to-tickets` makes the real list) |
+`/to-tickets` makes the real list; this is the target. Each ticket ends with something that runs.
+
+| # | Ticket | Milestone |
 |---|---|---|
-| M0 Decisions locked | Every spike and grilling decision is an ADR | Wayfinder map only, no product code |
-| M1 Works everywhere | Dictate into any app from a console window, within the 1.5 s budget | `transcribe <file.wav>` on GPU · Cleaner + guardrails + eval command · HotkeyMachine (pure, fake-clock tests) · Recorder with levels · Injector · Console app end to end |
-| M2 Live and remembered | Overlay pill works over every app; history survives restarts | History store · Local API with token · WebSocket events · Generated contract · Tauri app + sidecar + health screen · Mock engine mode · Overlay states · Overlay hands-free buttons and multi-display |
-| M3 Polished app | Hub, settings and tray in daily use; no known way to lose a dictation | Hub shell + themes + tokens · History grouped by day · Search + hover actions · Greeting, stats, empty state · Settings (hotkey, mic) · Settings (cleanup, model, overlay when idle, theme, launch at login, clear history, data folder) · Tray · Failure handling · Performance · Refactors from the architecture review |
-| M4 v1.0 | A fresh Windows account installs and dictates in 10 minutes | Engine as one exe sidecar · First-run setup · Installer + release workflow + LocalFlow Dev builds · Clean-account install test |
+| T1 | Engine package; `transcribe <file.wav>` on the GPU with warm-up and timing | M1 |
+| T2 | `clean()` with Ollama, the cleanup rules and raw fallback; `eval/run.py` over the eval clips | M1 |
+| T3 | Hotkey state machine (hold, double-tap, Esc) as pure code with fake-clock tests | M1 |
+| T4 | Record → transcribe → clean → paste end to end, from a console | M1 |
+| T5 | History table and the JSON-lines protocol (events, requests, commands) | M2 |
+| T6 | Electron app: tray, starts the engine, relays messages, fake bridge | M2 |
+| T7 | The oval: all states, level bars, hands-free buttons | M2 |
+| T8 | History window: grouped list, copy, delete, search, empty state | M3 |
+| T9 | Config file, launch at login, clear error messages (Ollama down, no mic, admin window) | M3 |
+| T10 | Package: engine exe (PyInstaller) inside an electron-builder installer; README setup steps | M3 |
+
+- **M1 Works everywhere:** dictate into any app from a console window, within the 1.5 s target.
+- **M2 Live:** the oval works over every app and every dictation is saved.
+- **M3 v1.0:** history window, tray and installer; a fresh Windows account installs and dictates in 10 minutes.
 
 ## 9. Working with Claude Code
 
-**Workflow (Matt Pocock's skills, installed with `npx skills@latest add mattpocock/skills` — not also as a plugin):**
-1. `/setup-matt-pocock-skills` once: GitHub Issues, default triage labels, single-context domain docs.
-2. `/wayfinder` charts a map of decision tickets from this brief (grilling, prototype and research tickets). Work it one ticket per session with `/wayfinder Work the map. Take the ticket "…"`, recording each decision as an ADR, until the map is clear.
-3. `/to-spec` on the cleared map, then `/to-tickets` **in the same session**.
-4. `/implement #N` for each ticket, one per fresh session, on its own `t/<number>-<name>` branch off `dev`. It uses `tdd` and `code-review` and commits; I review, test by hand and merge.
-5. `/improve-codebase-architecture` at M1 (engine only) and before M4 (whole repo). `diagnosing-bugs` for anything flaky or slow. `/handoff` when stopping mid-ticket. `/triage` for new issues. `/grill-with-docs` to plan each feature after v1.0.
-
-**Design skills and tools:**
-- Anthropic **`frontend-design`** skill — picks a deliberate aesthetic before coding and avoids generic AI-looking UI.
-- **impeccable** (`npx impeccable install`) — `init` (PRODUCT.md), `shape`, `document` (DESIGN.md); then `critique`, `audit` and `polish` after every UI ticket; `onboard` for empty and first-run states; `harden` for error states.
-- Vercel **`web-design-guidelines`** (`npx skills add https://github.com/vercel-labs/agent-skills --skill web-design-guidelines`) — the final UI check before merging.
-- **Playwright MCP** (`claude mcp add playwright -- cmd /c npx @playwright/mcp@latest`) — screenshots the UI so Claude fixes what it actually sees.
-- **Context7 MCP** (`claude mcp add --scope user context7 -- cmd /c npx -y @upstash/context7-mcp`) — current docs for Tauri 2, FastAPI, Tailwind and shadcn.
-- **shadcn MCP**, once `app/` exists (`claude mcp add --scope project shadcn -- cmd /c "cd app && npx shadcn@latest mcp"`) — finds and installs shadcn/ui components.
-- Not used: obra/superpowers (its workflow fights Matt's), `implement-spec` (skips the per-ticket review).
-- Read each third-party skill's SKILL.md before installing.
-
-**UI review loop, for every UI ticket:** ui-reviewer agent → `/impeccable critique` → `/impeccable audit` → `/impeccable polish` → `web-design-guidelines` → fix high-impact findings, rerun tests, commit.
-
-**UI reviewer subagent** — save as `.claude/agents/ui-reviewer.md`:
+**Put this block at the top of CLAUDE.md, word for word:**
 
 ```markdown
----
-name: ui-reviewer
-description: Reviews UI changes visually. Use after any change to the Hub window or overlay.
----
-You are a strict product designer. Start `pnpm --dir app dev:mock` if it isn't running,
-then use Playwright to screenshot every changed screen in light and dark mode at 1280x800
-and 900x700. Judge against PRODUCT.md and DESIGN.md at the repo root, and the screen
-contents in docs/PROJECT_BRIEF.md section 5. Report concrete issues ranked by impact:
-hierarchy, spacing rhythm, typography, contrast, alignment, empty/loading/error states,
-motion. Do not edit code; return a prioritised fix list.
+## Keep it simple (most important rule)
+- Two parts only: the Python engine and the Electron app, talking over stdin/stdout JSON lines.
+  No servers, ports, APIs, sidecar frameworks or background services.
+- Build only what the current ticket needs. No options, plugins, abstractions or future-proofing.
+- Plain functions first; a class only when it holds real state.
+- No new dependency without asking me.
+- Tests only for logic that can break: hotkey timing, cleanup fallback, history, the protocol.
+- If a change adds more than ~200 lines (not counting tests), stop and explain why first.
+- Prefer deleting code to adding it.
+- stdout in the engine is the protocol; log to stderr.
 ```
 
-## 10. Repo, code quality and branches
+**Workflow (Matt Pocock's skills, installed with `npx skills@latest add mattpocock/skills`):**
+1. `/setup-matt-pocock-skills` once: GitHub Issues, default labels, single-context docs.
+2. `/grill-with-docs` on this brief, one session, to close anything still open. (No wayfinder: the scope fits one session.)
+3. The `prototype` skill for the three spikes in section 7.
+4. `/to-spec`, then `/to-tickets` in the same session.
+5. `/implement #N` per ticket, one fresh session each, on a `t/<number>-<name>` branch off `dev`.
+6. `diagnosing-bugs` when something is flaky or slow; `/handoff` when stopping mid-ticket; `/ask-matt` when unsure.
 
-**Layout:**
+**Design tools:**
+- Anthropic's `frontend-design` skill, for a deliberate look.
+- impeccable (`npx impeccable install`): `init` (PRODUCT.md), `shape`, `document` (DESIGN.md), then `critique` and `polish` after each UI ticket.
+- Playwright MCP (`claude mcp add playwright -- cmd /c npx @playwright/mcp@latest`): screenshots the pages through the fake bridge.
+- Context7 MCP (`claude mcp add --scope user context7 -- cmd /c npx -y @upstash/context7-mcp`): current docs for Electron, electron-vite and Tailwind.
+
+**Not used:** Tauri/Rust, FastAPI (until the web demo), wayfinder, implement-spec, obra/superpowers, shadcn MCP, Vercel guidelines, a UI-reviewer subagent, architecture-review skills. Read any third-party skill's SKILL.md before installing it.
+
+## 10. Repo, quality and branches
 
 ```
 localflow/
   engine/      Python package (uv): src/localflow_engine, tests
-  app/         Tauri 2 + React + TypeScript (pnpm workspace package)
-  docs/        PROJECT_BRIEF.md, adr/, agents/ (written by Matt's setup), design/,
-               release-checklist.md, dogfood.md
-  eval/        audio/, cases.jsonl, record.py
-  spikes/      throwaway prototypes, never imported
-  scripts/     guard_push.py and other repo scripts
-  .claude/     settings.json (deny rules, format hook), agents/, hooks/
-  .github/     workflows/ (ci, dev-build, release), rulesets/
-  CLAUDE.md, PRODUCT.md, DESIGN.md, GLOSSARY.md (created by Matt's skills as terms are settled)
+  app/         Electron app (electron-vite react-ts template, npm)
+  docs/        PROJECT_BRIEF.md, adr/, agents/ (from Matt's setup), release-checklist.md, dogfood.md
+  eval/        audio/, cases.jsonl, record.py, run.py
+  spikes/      throwaway prototypes
+  .githooks/   pre-commit, pre-push
+  .claude/     settings.json (deny rules, format hook), hooks/
+  .github/     workflows/ci.yml, rulesets/
+  CLAUDE.md, PRODUCT.md, DESIGN.md
 ```
 
-**Quality gates:**
-- Python: ruff (lint and format, line length 100), pyright strict on `src`, pytest with a `gpu` marker that CI skips. Run `pytest -m gpu` and the eval locally before merging engine tickets.
-- TypeScript: strict `tsconfig`, Biome (lint and format), Vitest + Testing Library; Playwright end-to-end tests against the mock engine.
-- `.gitattributes` forces LF line endings. lefthook runs the linters and type checks on commit. A Claude Code PostToolUse hook formats every file Claude saves.
-- CI (GitHub Actions, `windows-latest`) runs on pull requests to `dev` and `main`, and on pushes to `dev`.
-- No new dependency without a one-paragraph ADR. `CLAUDE.md` stays under ~80 lines and points here.
+- **Python:** ruff (lint and format), pytest. Tests that need the GPU or real Windows input are marked and skipped in CI.
+- **TypeScript:** the template's ESLint, Prettier and type-check. No frontend test framework in v1.
+- **Git hooks** (plain scripts in `.githooks/`, enabled with `git config core.hooksPath .githooks`): pre-commit runs ruff, pytest and the app's lint and type-check; pre-push refuses any push to `main`.
+- **CI:** one GitHub Actions workflow on `ubuntu-latest` for pull requests to `dev` and `main`: ruff, pytest, lint, type-check.
+- **Claude Code:** deny rules block pushing to `main`, force-pushing, `gh pr merge` and changing repo settings or rulesets; a PostToolUse hook formats every file Claude saves.
 
 **Branches:**
-- `main` — only versions I've run and approved. Changes only through a promotion pull request from `dev`, merged by me with a **merge commit** (never squash). Releases are tagged here.
-- `dev` — the default branch. Every finished ticket, squash-merged by me from its pull request. My daily version runs from here.
-- `t/<number>-<name>` — one ticket, built by Claude with `/implement`.
-- `research/<name>` — wayfinder research notes.
-
-**Locks on main:** Claude Code deny rules (no pushing to `main`, no force-push, no `gh pr merge`, no repo-setting or ruleset changes); a lefthook pre-push guard (`scripts/guard_push.py`) that refuses any push to `refs/heads/main`; optionally a GitHub ruleset requiring a pull request and green CI (free on public repos, GitHub Pro on private ones). Claude never merges anything.
-
-**Promotion:** before promoting, I run `dev` live and work through `docs/release-checklist.md`. Any ticket that adds something a user can see also adds its check to that file.
+- `main`: only versions I've run and approved. Changes only through a promotion pull request from `dev`, merged by me with a merge commit (never squash). Releases are tagged here.
+- `dev`: the default branch. Every finished ticket, squash-merged by me.
+- `t/<number>-<name>`: one ticket, built by Claude with `/implement`.
+- Optional GitHub ruleset on `main` (free on a public repo): require a pull request and green CI.
+- Before promoting, I run `dev` and work through `docs/release-checklist.md`. Any ticket that adds something visible adds its check there.
 
 ## 11. Packaging and release
 
-- The engine is bundled as one exe (PyInstaller; Nuitka if startup is slow) and run as the Tauri sidecar.
-- Models are downloaded on first run with a progress screen, not bundled, to keep the installer small.
-- First-run setup: checks the GPU, checks for Ollama (links to install it if missing), downloads models, then teaches the hotkey with a short practice.
-- NSIS installer from Tauri's bundler. Unsigned for now, so Windows SmartScreen will warn.
-- `release.yml` builds and publishes the installer when a `v*` tag is pushed, and refuses tags that aren't on `main`.
-- `dev-build.yml` builds a **LocalFlow Dev** installer on every push to `dev` and uploads it as the `localflow-dev-setup` artifact. It has its own app identifier, name and data folder, so it installs next to the real app. Only one can run at a time, because both use the hotkey.
+- The engine is bundled as a folder with one exe using PyInstaller and shipped inside the Electron installer (electron-builder `extraResources`).
+- The installer is the NSIS one electron-builder makes by default. Unsigned, so Windows SmartScreen will warn.
+- Models aren't bundled. The README says: install Ollama, run `ollama pull <model>`; Parakeet downloads on first run.
+- On start, the engine checks the GPU, Ollama and the models, and sends a clear error to the oval if anything is missing.
+- Releases are built on my PC from `main` and uploaded with `gh release create`. No release pipeline.

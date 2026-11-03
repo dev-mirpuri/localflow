@@ -1,4 +1,17 @@
 {
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.py\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ]
+  },
   "permissions": {
     "deny": [
       "Bash(git push * main)",
@@ -15,19 +28,6 @@
       "PowerShell(gh pr merge *)",
       "PowerShell(gh repo edit *)",
       "PowerShell(gh api *rulesets*)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run --no-project \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.py\""
-          }
-        ]
-      }
     ]
   }
 }

@@ -18,9 +18,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.414",
     "pytest>=9.2.0",
-    "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.17.3",
 ]
 
@@ -30,14 +28,10 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "strict"
-venvPath = "."
-venv = ".venv"
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers -m 'not gpu'"
-asyncio_default_fixture_loop_scope = "function"
-markers = ["gpu: needs a CUDA GPU; deselected unless run with -m gpu"]
+addopts = "--strict-markers -m 'not gpu and not windows'"
+markers = [
+    "gpu: needs a CUDA GPU; deselected unless run with -m gpu",
+    "windows: needs real Windows input; deselected unless run with -m windows",
+]
