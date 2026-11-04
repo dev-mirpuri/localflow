@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- THROWAWAY spike S3. Not the real oval design: it only has to animate and take a click. -->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'" />
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+      #pill {
+        height: 100%; box-sizing: border-box; border-radius: 22px; background: #17171c; color: #f2f2f5;
+        display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 6px;
+        font: 600 13px system-ui;
+      }
+      button {
+        width: 32px; height: 32px; border: 0; border-radius: 50%; background: #34343c; color: #f2f2f5;
+        font-size: 15px; cursor: pointer; display: none;
+      }
+      button:hover { background: #50505a; }
+      .handsfree button { display: block; }
+      #bars, #dots { display: flex; align-items: center; gap: 3px; height: 26px; }
+      .bar { width: 4px; height: 26px; border-radius: 2px; background: #f2f2f5; transition: transform 60ms linear; }
+      #dots { display: none; }
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: #f2f2f5; animation: pulse 900ms infinite; }
+      .dot:nth-child(2) { animation-delay: 150ms; }
+      .dot:nth-child(3) { animation-delay: 300ms; }
+      @keyframes pulse { 50% { opacity: 0.25; transform: scale(0.7); } }
+      .processing #bars { display: none; }
+      .processing #dots { display: flex; }
+    </style>
+  </head>
+  <body>
+    <div id="pill">
+      <button id="cancel">✕</button>
+      <div id="bars">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+      <div id="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+      <span id="label"></span>
+      <button id="check">✓</button>
+    </div>
+    <script>
+      const pill = document.getElementById('pill')
+      const label = document.getElementById('label')
+      const bars = [...document.querySelectorAll('.bar')]
+      const weights = [0.6, 0.85, 1, 0.8, 0.55]
+
+      window.oval.onState(({ state, text }) => {
+        pill.className = state
+        label.textContent = text
+      })
+      window.oval.onLevel((level) => {
+        bars.forEach((bar, i) => { bar.style.transform = `scaleY(${0.15 + level * weights[i] * 0.85})` })
+      })
+
+      // Signals the spike logs: a mouse press or key that reaches the oval, and how smoothly it draws.
+      window.addEventListener('mousedown', () => window.oval.send('mousedown'))
+      window.addEventListener('keydown', () => window.oval.send('keydown'))
+      document.getElementById('cancel').addEventListener('click', () => window.oval.send('button', 'cancel'))
+      document.getElementById('check').addEventListener('click', () => window.oval.send('button', 'check'))
+
+      let frames = 0
+      const countFrame = () => { frames += 1; requestAnimationFrame(countFrame) }
+      requestAnimationFrame(countFrame)
+      setInterval(() => { if (frames > 0) window.oval.send('fps', frames); frames = 0 }, 1000)
+    </script>
+  </body>
+</html>
