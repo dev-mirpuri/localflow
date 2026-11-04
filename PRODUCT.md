@@ -54,6 +54,10 @@ It is honest about the trade: a small model on a local GPU handles light cleanup
 
 The name is provisional (see above). No logo or brand assets exist: `app/resources/icon.png` is still Electron's default icon, not an identity.
 
+## Design Direction
+
+Chosen 2026-11-04: direction C from the design spike (`spikes/design`, screenshots in `docs/design/shots/`), which is neutral and quiet like Wispr Flow, Raycast and Linear, with one sparing accent. It adds always-visible Copy, stronger day labels and lines capped at about 75 characters. [DESIGN.md](DESIGN.md) holds the details.
+
 ## Evidence on Hand
 
 - Measured spike results: [ADR-0001](docs/adr/0001-s1-speech-and-cleanup-models.md) (speech and cleanup), [ADR-0002](docs/adr/0002-s2-hotkey-and-paste.md) (Hotkey and paste), [ADR-0003](docs/adr/0003-s3-oval-focus.md) (Oval focus).
