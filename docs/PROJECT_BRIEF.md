@@ -113,7 +113,7 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 
 **History table:** `id, created_at, raw_text, clean_text, target_app, status (ok | raw_fallback)`. Delete removes the whole row.
 
-**Config:** I edit `config.json` by hand. The engine reads it at startup and never writes it. If it's missing, the engine uses defaults. If the JSON is invalid, the engine uses defaults and shows an error.
+**Config:** I edit `config.json` by hand. The engine reads it at startup. If it's missing, the engine creates it with defaults; it never overwrites an existing file. If the JSON is invalid, the engine uses defaults and shows an error.
 
 **Data folder:** `%APPDATA%\LocalFlow` (history, `config.json`, logs). When running from source (`npm run dev`), use `%APPDATA%\LocalFlow Dev`, so testing never touches real history. The app passes the folder to the engine as `--data-dir`. Quit the installed copy before `npm run dev`, or both will respond to the hotkey.
 
@@ -186,7 +186,7 @@ S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its 
 | T6 | Electron app: tray, starts the engine with `--data-dir`, relays messages, fake bridge, single-instance lock, `loading` state, error after an engine crash, Quit unloads the cleanup model | M2 |
 | T7 | The oval: all states, level bars, hands-free buttons, startup messages | M2 |
 | T8 | History window: grouped list of the latest 200, copy, delete, search, empty state | M3 |
-| T9 | Read-only config file (hotkey with invalid-key fallback, microphone by name, cleanup model), launch at login that stays in the tray, clear error messages (invalid config, Ollama down, no mic, GPU or Parakeet unavailable, unsupported machine) | M3 |
+| T9 | Config file, created with defaults if missing and never overwritten (hotkey with invalid-key fallback, microphone by name, cleanup model), launch at login that stays in the tray, clear error messages (invalid config, Ollama down, no mic, GPU or Parakeet unavailable, unsupported machine) | M3 |
 | T10 | Package: engine exe (PyInstaller) inside an electron-builder installer, proving the packaged engine transcribes on the GPU; README setup steps | M3 |
 
 - **M1 Works everywhere:** dictate into any app from a console window, within the 1.5 s target.
@@ -274,6 +274,6 @@ Cut from v1. Don't build or design around these.
 - Multi-format clipboard restore and Win+V exclusion.
 - Admin-window detection.
 - Automatic engine restarts.
-- Config writing, `capture_hotkey`, `save_settings` and fake-bridge settings coverage.
+- Saving settings to the config file, `capture_hotkey`, `save_settings` and fake-bridge settings coverage.
 - The "Show more" button.
 - The "S1 also" and "S2 also" check lists. T10 keeps the PyInstaller proof.
