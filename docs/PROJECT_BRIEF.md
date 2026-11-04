@@ -20,7 +20,7 @@ Press a hotkey in any app where you can type (a terminal, Claude Code, Slack, a 
    - Recording finishes by itself after 3 minutes and is processed normally.
    - Starting a new dictation while earlier ones are processing queues them; they paste in order.
 2. **Speech recognition** with NVIDIA Parakeet (English) on the GPU.
-3. **Cleanup** with a small local model through Ollama: remove filler words, fix punctuation and capitals, resolve self-corrections ("at 3, no, 4pm" → "at 4pm"), format spoken lists. It must never answer or act on what I said — it only rewrites it. If cleanup fails, paste the raw text.
+3. **Cleanup** with a small local model through Ollama: remove filler words, fix punctuation and capitals, resolve self-corrections ("at 3, no, 4pm" → "at 4pm"), format spoken lists (reliably only in short dictations; long ones stay inline in v1). It must never answer or act on what I said — it only rewrites it. If cleanup fails, paste the raw text.
 4. **Paste at the cursor** of whichever text box has focus at paste time, then put my clipboard back.
 5. **The oval**: appears at the bottom centre of the main screen while dictating — moving level bars while listening, ✕ and ✓ buttons in hands-free mode, dots while processing, a short message on error. It never takes focus from the app I'm typing in.
 6. **History window**: every dictation, newest first, grouped by day, each with a copy button and a delete button, plus a search box and a "Show more" button. Entries are kept until I delete them; delete is immediate, with no confirmation or undo.
@@ -65,7 +65,7 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 |---|---|---|
 | Hotkey | `keyboard` library **(spike)** | Needs key-down and key-up; ignore auto-repeat |
 | Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars. Opens on key-down unless S2 shows first words get clipped. Config matches the device by name; empty means the system default; the device list goes in the log |
-| Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | Fallback: `faster-whisper` with `distil-large-v3` |
+| Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | Recordings over ~20 s go through VAD first; shorter ones go straight to Parakeet. Fallback: `faster-whisper` with `distil-large-v3` |
 | Cleanup | `ollama` Python package with `qwen3:1.7b` ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | `think=False`; `keep_alive=-1`; warm both models up at start; Quit unloads the model with `keep_alive=0` to free the VRAM |
 | Paste | Save clipboard → set text → Ctrl+V → restore clipboard **(spike)** | Saves and restores every format that can be copied as a memory block (text, HTML, images, files) and skips the rest; keeps the dictation text out of Win+V history. Admin windows can't be pasted into (detected by comparing elevation); the oval says "Couldn't paste — copied to history" |
 | Target app | Foreground window's process name at paste time (Win32 via `ctypes`) | Shown in history only |
@@ -99,10 +99,14 @@ All triggers:
 
 **Cleanup rules:**
 - Transcript wrapped in tags; the prompt says "output only the cleaned text". The full prompt, word for word, is in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md).
-- On error, timeout or rejected output → raw fallback: paste the transcript.
-- The timeout is ~3 s + ~0.012 s per word of transcript.
-- Output is rejected unless at least 80% of its words appear in the transcript, ignoring list numbers, and it's between 0.55× and 1.3× as long.
 - 3 words or fewer → skip the model and use the transcript unchanged.
+- Pre-pass before the model: plain text matching deletes standalone "um", "uh" and "erm" in any case and "er" in lowercase only, plus a comma straight after.
+- Chunks: split the joined transcript at sentence ends. A sentence under 4 words stays attached to the next one. Group into chunks of up to ~40 words without splitting a sentence, clean each with the same prompt and rule, and join them.
+- On error, timeout or rejected output → raw fallback: paste that chunk's transcript. If the pre-pass leaves nothing, the same applies.
+- The timeout for each chunk is ~3 s + ~0.012 s per word.
+- Output is rejected unless at least 80% of its words appear in the text sent to the model, ignoring list numbers, and it's between 0.60× and 1.3× as long.
+- Numbered lists are formatted reliably only in short dictations; long ones stay inline in v1.
+- Known weakness: a self-corrected name can keep the wrong name, and the rejection rule can't catch it (eval clips 08 and 22).
 
 **Pasted text:** trailing whitespace is stripped, then one trailing space is added to the paste only (not the entry or the copy button). Inner newlines stay.
 
@@ -184,7 +188,7 @@ Throwaway prototypes in `spikes/`, half a day each, each ending in an ADR with m
 | S2 Hotkey and paste | Do hold and double-tap feel right, and does paste work everywhere I type? | No misfires in 50 mixed presses; paste works in Notepad, Chrome, VS Code, Slack, Windows Terminal and Claude Code | Change key or timings; typed input for apps where Ctrl+V fails |
 | S3 Oval focus | Can an Electron window appear, animate and take a click without stealing focus from Notepad? | Typing keeps landing in Notepad 20 times out of 20 | Draw the oval from Python with tkinter instead |
 
-S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md). Eval clips 19–24 are a holdout and are never used for tuning.
+S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md). Eval clips 19–24 are a holdout and are never used for tuning. They're now a weaker check, because the pre-pass was added after seeing clips 19 and 20 fail.
 
 **S1 also:**
 - Proves a PyInstaller-bundled exe transcribes on the GPU, rather than leaving that risk to T10.
@@ -206,8 +210,8 @@ S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-
 
 | # | Ticket | Milestone |
 |---|---|---|
-| T1 | Engine package; `transcribe <file.wav>` on the GPU with warm-up and timing | M1 |
-| T2 | `clean()` with Ollama, the cleanup rules and raw fallback; `eval/run.py` over the eval clips | M1 |
+| T1 | Engine package; `transcribe <file.wav>` on the GPU with warm-up and timing, and VAD over ~20 s | M1 |
+| T2 | `clean()` with Ollama, the cleanup rules (pre-pass, chunks, rejection) and raw fallback; `eval/run.py` over the eval clips | M1 |
 | T3 | Hotkey state machine (hold, double-tap, Esc, combinations, trigger modes) as pure code with fake-clock tests | M1 |
 | T4 | Record → transcribe → clean → paste end to end with the queue, from a console | M1 |
 | T5 | History table and the JSON-lines protocol (events, requests, commands, including `config`, `capture_hotkey` and `save_settings`) | M2 |
