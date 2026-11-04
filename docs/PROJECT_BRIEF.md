@@ -86,10 +86,10 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 
 **Cleanup rules:**
 - Transcript wrapped in tags; the prompt says "output only the cleaned text". The full prompt, word for word, is in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md).
-- 3 words or fewer → skip the model and use the transcript unchanged.
-- Pre-pass before the model: plain text matching deletes standalone "um", "uh" and "erm" in any case and "er" in lowercase only, plus a comma straight after.
-- Chunks: split the joined transcript at sentence ends. A sentence under 4 words stays attached to the next one. Group into chunks of up to ~40 words without splitting a sentence, clean each with the same prompt and rule, and join them.
-- On error, timeout or rejected output → raw fallback: paste that chunk's transcript. If the pre-pass leaves nothing, the same applies.
+- Pre-pass first: plain text matching deletes standalone "um", "uh" and "erm" in any case and "er" in lowercase only, plus a comma straight after. If it leaves nothing, discard the recording like a silent clip: no paste, no entry.
+- 3 words or fewer left after the pre-pass → skip the model and use the pre-passed text, with status `ok`.
+- Chunks: split the joined transcript at sentence ends. A sentence under 4 words stays attached to the next one. Group into chunks of up to ~40 words without splitting a sentence, pre-pass each one, clean it with the same prompt and rule, and join them. A chunk the pre-pass empties is dropped.
+- On error, timeout or rejected output → raw fallback: paste that chunk's transcript.
 - The timeout for each chunk is ~3 s + ~0.012 s per word.
 - Output is rejected unless at least 80% of its words appear in the text sent to the model, ignoring list numbers, and it's between 0.60× and 1.3× as long.
 - Numbered lists are formatted reliably only in short dictations; long ones stay inline in v1.
@@ -106,9 +106,10 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 - GPU or Parakeet unavailable → every press shows the error.
 
 **Protocol** (one JSON object per line; stdout carries only protocol messages — all logging goes to stderr and a log file):
-- Engine → app: `{"type":"state","state":"loading|idle|listening|handsfree|processing"}`, `{"type":"level","value":0.42}`, `{"type":"result","entry":{…}}`, `{"type":"error","message":"…"}`, `{"type":"config","hotkey":"right ctrl","launch_at_login":false}`, `{"type":"reply","id":3,"data":…}`.
+- Engine → app: `{"type":"state","state":"loading|downloading|idle|listening|handsfree|processing"}`, `{"type":"level","value":0.42}`, `{"type":"result","entry":{…}}`, `{"type":"error","message":"…"}`, `{"type":"config","hotkey":"right ctrl","launch_at_login":false}`, `{"type":"reply","id":3,"data":…}`.
 - App → engine: `{"type":"request","id":3,"method":"list_history","params":{"query":"","limit":200}}`, `{"type":"request","id":4,"method":"delete_entry","params":{"id":12}}`, `{"type":"command","name":"finish|cancel"}`.
 - `config` is sent at startup.
+- `loading` is sent only when the hotkey is pressed during warm-up, and the oval shows "Starting up…" briefly. `downloading` is sent when the first-run Parakeet download starts, and the oval shows "Downloading speech model…" until the next state. Neither is an error, and neither is styled as one.
 - The history window asks `list_history` for the latest 200. Search is a case-insensitive substring match on `clean_text` across all entries.
 
 **History table:** `id, created_at, raw_text, clean_text, target_app, status (ok | raw_fallback)`. Delete removes the whole row.
@@ -155,7 +156,7 @@ Calm, fast and clean, like Wispr Flow, Raycast or Linear. One look, no themes. T
 
 - Release-to-text ≤ ~1.5 s for one or two sentences (timings written to the log). Longer dictations can take longer.
 - VRAM ≤ ~5 GB with both models loaded.
-- Nothing I finish saying is lost: if cleanup fails, the raw text is pasted and saved; if the paste fails, the entry is still saved; if transcription fails, the recording is kept in `last-failed.wav`. (Cancelled recordings, accidental taps and silent clips are deliberately thrown away.)
+- Nothing I finish saying is lost: if cleanup fails, the raw text is pasted and saved; if the paste fails, the entry is still saved; if transcription fails, the recording is kept in `last-failed.wav`. (Cancelled recordings, accidental taps, silent clips and recordings with only filler words are deliberately thrown away.)
 - Small codebase: aim for under ~2,000 lines including tests, not counting the generated template.
 
 ## 7. Spikes (before any real code)
@@ -183,7 +184,7 @@ S3 is done: the results are in [ADR-0003](adr/0003-s3-oval-focus.md). Its pass b
 | T1 | Engine package; `transcribe <file.wav>` on the GPU with warm-up and timing, and VAD over ~20 s | M1 |
 | T2 | `clean()` with Ollama, the cleanup rules (pre-pass, chunks, rejection) and raw fallback; `eval/run.py` over the eval clips | M1 |
 | T3 | Hotkey state machine (hold, double-tap, Esc, other-key cancel, 3-minute limit, presses ignored while processing) as pure code with fake-clock tests | M1 |
-| T4 | Record → transcribe → clean → paste end to end, from a console: history table with save-before-paste, target app, `last-failed.wav`, discard of short or silent recordings, paste waits for key-up, trailing space, clipboard text restore, log file | M1 |
+| T4 | Record → transcribe → clean → paste end to end, from a console: history table with save-before-paste, target app, `last-failed.wav`, discard of short, silent or filler-only recordings, paste waits for key-up, trailing space, clipboard text restore, log file | M1 |
 | T5 | History reads and deletes, and the JSON-lines protocol (events, requests, commands, including `config`); engine exits when stdin closes | M2 |
 | T6 | Electron app: tray, starts the engine with `--data-dir`, relays messages, fake bridge, single-instance lock, `loading` state, error after an engine crash, Quit unloads the cleanup model | M2 |
 | T7 | The oval: all states, level bars, hands-free buttons, startup messages, widening while showing a message. Acceptance includes repeating S3's Notepad test with a message showing, including its click-through check, because clicks on a wider window weren't tested ([ADR-0003](adr/0003-s3-oval-focus.md)) | M2 |
