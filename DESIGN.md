@@ -179,7 +179,7 @@ The window never takes focus. Only ✕ and ✓ take clicks.
 - **Listening:** 7 thin bars (2.5px wide, 3px gap) between 3px and 16px tall, following the Engine's level with 90ms linear transitions.
 - **Hands-free:** the same, with ✕ in Soft Grey and ✓ in Soft Signal Blue, each with a 26px target.
 - **Processing:** the same bars settle into 3 round 5px dots over 260ms (`cubic-bezier(0.16, 1, 0.3, 1)`). The dots then pulse in sequence on an 1100ms cycle.
-- **Message:** one line of Near White text in the same shape. See Wording.
+- **Message:** one line of Near White text in the same shape, which widens to fit. See Wording.
 - **Reduced motion:** bars hold still and dots stop pulsing.
 
 ## Do's and Don'ts
@@ -208,5 +208,5 @@ The spike doesn't do these, so don't copy its behaviour on these points.
 ## Wording
 
 - **Oval errors name the fix,** for example "Ollama isn't running. Start Ollama and try again."
-- **The "uncleaned" tag has a tooltip:** "Cleanup didn't run, so this is exactly what you said."
+- **The "uncleaned" tag has a tooltip:** "Cleanup didn't finish, so this is the raw transcript."
 - **Loading states are one line each in the Oval:** "Starting up…" and "Downloading speech model…".

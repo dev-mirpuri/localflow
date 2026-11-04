@@ -100,7 +100,7 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 **Failed transcription:** the recording is saved to `last-failed.wav` in the data folder, overwritten each time, and the oval shows an error. No entry and no retry UI.
 
 **Startup:**
-- While models load, a hotkey press shows "Still loading…" on the oval and records nothing.
+- While models load, a hotkey press shows "Starting up…" on the oval and records nothing.
 - During the first-run Parakeet download, the oval shows "Downloading speech model…" until it finishes.
 - Ollama or the cleanup model missing → the oval shows the error; dictation still works with raw fallback.
 - GPU or Parakeet unavailable → every press shows the error.
@@ -140,7 +140,7 @@ Calm, fast and clean, like Wispr Flow, Raycast or Linear. One look, no themes. T
 **History window**
 - Search box at the top.
 - The latest 200 entries, newest first, grouped under Today / Yesterday / date.
-- Each entry: the cleaned text (two lines, click to expand), time, the app it went into, a copy button (shows "Copied" briefly) and a delete button. Raw-fallback entries get a small "uncleaned" tag.
+- Each entry: the cleaned text (two lines, click to expand), time, the app it went into, a copy button (shows "Copied" briefly) and a delete button. Raw-fallback entries get a small "uncleaned" tag with a tooltip: "Cleanup didn't finish, so this is the raw transcript."
 - Empty state: one line teaching the configured hotkey (e.g. "Hold Right Ctrl and speak").
 
 **The oval**
@@ -148,8 +148,8 @@ Calm, fast and clean, like Wispr Flow, Raycast or Linear. One look, no themes. T
 - Listening: level bars that move with my voice.
 - Hands-free: the same, plus ✕ and ✓.
 - Processing: the bars settle into pulsing dots.
-- Done: disappears. Error: one short line (e.g. "Ollama isn't running"), then disappears.
-- Startup: "Still loading…" if the hotkey is pressed during warm-up; "Downloading speech model…" for as long as the first-run download takes.
+- Done: disappears. Error: one line that names the fix (e.g. "Ollama isn't running. Start Ollama and try again."), then disappears. The oval widens while showing a message.
+- Startup: "Starting up…" if the hotkey is pressed during warm-up; "Downloading speech model…" for as long as the first-run download takes.
 
 ## 6. Targets
 
@@ -186,7 +186,7 @@ S3 is done: the results are in [ADR-0003](adr/0003-s3-oval-focus.md). Its pass b
 | T4 | Record → transcribe → clean → paste end to end, from a console: history table with save-before-paste, target app, `last-failed.wav`, discard of short or silent recordings, paste waits for key-up, trailing space, clipboard text restore, log file | M1 |
 | T5 | History reads and deletes, and the JSON-lines protocol (events, requests, commands, including `config`); engine exits when stdin closes | M2 |
 | T6 | Electron app: tray, starts the engine with `--data-dir`, relays messages, fake bridge, single-instance lock, `loading` state, error after an engine crash, Quit unloads the cleanup model | M2 |
-| T7 | The oval: all states, level bars, hands-free buttons, startup messages | M2 |
+| T7 | The oval: all states, level bars, hands-free buttons, startup messages, widening while showing a message. Acceptance includes repeating S3's Notepad test with a message showing, including its click-through check, because clicks on a wider window weren't tested ([ADR-0003](adr/0003-s3-oval-focus.md)) | M2 |
 | T8 | History window: grouped list of the latest 200, copy, delete, search, empty state | M3 |
 | T9 | Config file, created with defaults if missing and never overwritten (hotkey with invalid-key fallback, microphone by name, cleanup model), launch at login that stays in the tray, clear error messages (invalid config, Ollama down, no mic, GPU or Parakeet unavailable, unsupported machine) | M3 |
 | T10 | Package: engine exe (PyInstaller) inside an electron-builder installer, proving the packaged engine transcribes on the GPU; README setup steps | M3 |
