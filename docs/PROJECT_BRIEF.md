@@ -37,7 +37,7 @@ Login or accounts; stats, streaks or greetings; themes (one look only); showing 
 - A main window (the "Hub") with a searchable history grouped by date; hovering an entry shows copy.
 - The "Flow Bar": a small floating pill at the bottom of the screen that shows recording and processing, with cancel and confirm buttons.
 - Hold the hotkey to talk; double-tap it for hands-free; Esc cancels.
-- Cleanup runs on fine-tuned Llama models on cloud GPUs. Ours runs a 3–4B model on my GPU, so it handles light cleanup well but isn't as strong at heavy rewording.
+- Cleanup runs on fine-tuned Llama models on cloud GPUs. Ours runs a small model on my GPU, so it handles light cleanup well but isn't as strong at heavy rewording.
 
 Sources: docs.wisprflow.ai ("Navigating the Wispr Flow App", "Move and Dock the Flow Bar on Desktop"); wisprflow.ai/whats-new; baseten.co/customers/wispr-flow.
 
@@ -65,8 +65,8 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 |---|---|---|
 | Hotkey | `keyboard` library **(spike)** | Needs key-down and key-up; ignore auto-repeat |
 | Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars. Opens on key-down unless S2 shows first words get clipped. Config matches the device by name; empty means the system default; the device list goes in the log |
-| Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA **(spike)** | Fallback: `faster-whisper` with `distil-large-v3` |
-| Cleanup | `ollama` Python package; candidates `qwen3:4b`, `qwen3:1.7b`, `llama3.2:3b` **(spike)** | `think=False` for Qwen3; `keep_alive=-1`; warm both models up at start; Quit unloads the model with `keep_alive=0` to free the VRAM |
+| Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | Fallback: `faster-whisper` with `distil-large-v3` |
+| Cleanup | `ollama` Python package with `qwen3:1.7b` ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | `think=False`; `keep_alive=-1`; warm both models up at start; Quit unloads the model with `keep_alive=0` to free the VRAM |
 | Paste | Save clipboard → set text → Ctrl+V → restore clipboard **(spike)** | Saves and restores every format that can be copied as a memory block (text, HTML, images, files) and skips the rest; keeps the dictation text out of Win+V history. Admin windows can't be pasted into (detected by comparing elevation); the oval says "Couldn't paste — copied to history" |
 | Target app | Foreground window's process name at paste time (Win32 via `ctypes`) | Shown in history only |
 | History | `sqlite3` (standard library) | One table, see below. The entry is saved before the paste |
@@ -98,11 +98,11 @@ All triggers:
 - The oval shows listening over processing. An error from a queued dictation waits until the current recording ends.
 
 **Cleanup rules:**
-- Transcript wrapped in tags; the prompt says "output only the cleaned text".
+- Transcript wrapped in tags; the prompt says "output only the cleaned text". The full prompt, word for word, is in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md).
 - On error, timeout or rejected output → raw fallback: paste the transcript.
-- The timeout starts at ~3 s and grows with transcript length, at a rate measured in S1.
-- Output is rejected unless at least ~80% of its words appear in the transcript and it's at most ~1.3× as long. S1 tunes both numbers against the eval clips.
-- 3 words or fewer → skip the model and use the transcript unchanged, if S1 confirms Parakeet punctuates; otherwise just capitalise and punctuate.
+- The timeout is ~3 s + ~0.012 s per word of transcript.
+- Output is rejected unless at least 80% of its words appear in the transcript, ignoring list numbers, and it's between 0.55× and 1.3× as long.
+- 3 words or fewer → skip the model and use the transcript unchanged.
 
 **Pasted text:** trailing whitespace is stripped, then one trailing space is added to the paste only (not the entry or the copy button). Inner newlines stay.
 
@@ -183,6 +183,8 @@ Throwaway prototypes in `spikes/`, half a day each, each ending in an ADR with m
 | S1 Models | Do Parakeet and the cleanup candidates run fast enough on this PC, and which cleans best? | Parakeet under 0.5 s per 10 s of speech; cleanup never answers or obeys the eval clips, under 0.8 s each | faster-whisper; a different cleanup model or prompt |
 | S2 Hotkey and paste | Do hold and double-tap feel right, and does paste work everywhere I type? | No misfires in 50 mixed presses; paste works in Notepad, Chrome, VS Code, Slack, Windows Terminal and Claude Code | Change key or timings; typed input for apps where Ctrl+V fails |
 | S3 Oval focus | Can an Electron window appear, animate and take a click without stealing focus from Notepad? | Typing keeps landing in Notepad 20 times out of 20 | Draw the oval from Python with tkinter instead |
+
+S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md). Eval clips 19–24 are a holdout and are never used for tuning.
 
 **S1 also:**
 - Proves a PyInstaller-bundled exe transcribes on the GPU, rather than leaving that risk to T10.
