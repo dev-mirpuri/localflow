@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=2.5.4",
     # The newest nvidia-cublas (13.8.2.x) has no Windows wheel; this is the last one that does.
     "nvidia-cublas==13.8.0.4; sys_platform == 'win32'",
+    "ollama>=0.6.3",
     "onnx-asr[gpu,hub]==0.12.0; sys_platform == 'win32'",
     "onnxruntime-gpu[cuda,cudnn]==1.31.1; sys_platform == 'win32'",
 ]
@@ -24,6 +25,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.2.0",
     "ruff>=0.17.3",
     "sounddevice>=0.5.6",
