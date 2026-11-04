@@ -63,18 +63,18 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 
 | Part | Choice | Notes |
 |---|---|---|
-| Hotkey | `keyboard` library **(spike)** | Needs key-down and key-up; ignore auto-repeat |
-| Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars. Opens on key-down unless S2 shows first words get clipped. Config matches the device by name; empty means the system default; the device list goes in the log |
+| Hotkey | `keyboard` library ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)) | Needs key-down and key-up; ignore auto-repeat |
+| Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars. Opens on key-down ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)). Config matches the device by name; empty means the system default; the device list goes in the log |
 | Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | Recordings over ~20 s go through VAD first; shorter ones go straight to Parakeet. Fallback: `faster-whisper` with `distil-large-v3` |
 | Cleanup | `ollama` Python package with `qwen3:1.7b` ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | `think=False`; `keep_alive=-1`; warm both models up at start; Quit unloads the model with `keep_alive=0` to free the VRAM |
-| Paste | Save clipboard → set text → Ctrl+V → restore clipboard **(spike)** | Saves and restores every format that can be copied as a memory block (text, HTML, images, files) and skips the rest; keeps the dictation text out of Win+V history. Admin windows can't be pasted into (detected by comparing elevation); the oval says "Couldn't paste — copied to history" |
+| Paste | Save clipboard → set text → Ctrl+V → restore clipboard after 200 ms ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)) | The 200 ms is unmeasured; revisit it if restores fail in daily use. Saves and restores every format that can be copied as a memory block (text, HTML, images, files) and skips the rest; keeps the dictation text out of Win+V history. Admin windows can't be pasted into (detected by comparing elevation); the oval says "Couldn't paste — copied to history" |
 | Target app | Foreground window's process name at paste time (Win32 via `ctypes`) | Shown in history only |
 | History | `sqlite3` (standard library) | One table, see below. The entry is saved before the paste |
 
-**Hotkey rules (defaults; spike S2 sets the final key and timings):**
+**Hotkey rules (key and timings set by [ADR-0002](adr/0002-s2-hotkey-and-paste.md); two-key and three-key hotkeys are untested):**
 - The hotkey is one or more of Ctrl, Shift, Alt, Win and the F-keys. A lone Alt or lone Win is rejected. An invalid hotkey falls back to the default, with an error on the oval.
 - It counts as pressed when all its keys are down, in any order, and released as soon as any one comes up. A double-tap is press, release, press within 350 ms.
-- Default key: Right Ctrl, or another single key if it misfires in the spike. Default trigger: `both`.
+- Default key: Right Ctrl. Default trigger: `both`.
 
 Trigger `both`:
 - Key down → start recording at once.
@@ -108,7 +108,7 @@ All triggers:
 - Numbered lists are formatted reliably only in short dictations; long ones stay inline in v1.
 - Known weakness: a self-corrected name can keep the wrong name, and the rejection rule can't catch it (eval clips 08 and 22).
 
-**Pasted text:** trailing whitespace is stripped, then one trailing space is added to the paste only (not the entry or the copy button). Inner newlines stay.
+**Pasted text:** trailing whitespace is stripped, then one trailing space is added to the paste only (not the entry or the copy button). Inner newlines stay, including in terminals, where they neither run nor submit anything ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)).
 
 **Failed transcription:** the recording is saved to `last-failed.wav` in the data folder, overwritten each time, and the oval shows an error. No entry and no retry UI.
 
@@ -189,6 +189,8 @@ Throwaway prototypes in `spikes/`, half a day each, each ending in an ADR with m
 | S3 Oval focus | Can an Electron window appear, animate and take a click without stealing focus from Notepad? | Typing keeps landing in Notepad 20 times out of 20 | Draw the oval from Python with tkinter instead |
 
 S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md). Eval clips 19–24 are a holdout and are never used for tuning. They're now a weaker check, because the pre-pass was added after seeing clips 19 and 20 fail.
+
+S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its pass bar is met. Two-key and three-key hotkeys, image and file restore, and the restore wait from the list below were not run, and stay open there.
 
 **S1 also:**
 - Proves a PyInstaller-bundled exe transcribes on the GPU, rather than leaving that risk to T10.
