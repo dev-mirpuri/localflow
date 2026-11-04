@@ -25,7 +25,7 @@ _Avoid_: Pill, bar, Flow Bar
 ### Dictating
 
 **Hotkey**:
-The global key, or combination of keys, that starts and finishes a Recording.
+The global key that starts and finishes a Recording.
 _Avoid_: Shortcut, keybind
 
 **Dictation**:

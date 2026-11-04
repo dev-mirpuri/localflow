@@ -8,6 +8,7 @@
 - If a change adds more than ~200 lines (not counting tests), stop and explain why first.
 - Prefer deleting code to adding it.
 - stdout in the engine is the protocol; log to stderr.
+- Never change section 2 of docs/PROJECT_BRIEF.md unless I explicitly ask.
 
 # LocalFlow
 

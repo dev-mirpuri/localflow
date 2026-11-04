@@ -13,24 +13,23 @@ Press a hotkey in any app where you can type (a terminal, Claude Code, Slack, a 
 
 ## 2. Core features (v1 — this is the whole product)
 
-1. **Dictate anywhere** with one global hotkey (one key or a combination), set to hold, double-tap or both:
+1. **Dictate anywhere** with one global hotkey:
    - **Hold** → push-to-talk; release to finish. Pressing any other key cancels.
    - **Double-tap** → hands-free; tap again, or click ✓ on the oval, to finish. Other keys are ignored, so I can switch windows.
    - **Esc** (or ✕ on the oval) cancels the recording in progress. Once I've finished speaking, a dictation can't be stopped; Esc then goes to the app I'm typing in.
    - Recording finishes by itself after 3 minutes and is processed normally.
-   - Starting a new dictation while earlier ones are processing queues them; they paste in order.
+   - Pressing the hotkey while a dictation is processing does nothing.
 2. **Speech recognition** with NVIDIA Parakeet (English) on the GPU.
 3. **Cleanup** with a small local model through Ollama: remove filler words, fix punctuation and capitals, resolve self-corrections ("at 3, no, 4pm" → "at 4pm"), format spoken lists (reliably only in short dictations; long ones stay inline in v1). It must never answer or act on what I said — it only rewrites it. If cleanup fails, paste the raw text.
-4. **Paste at the cursor** of whichever text box has focus at paste time, then put my clipboard back.
+4. **Paste at the cursor** of whichever text box has focus at paste time, then put my clipboard text back. Other clipboard formats aren't restored; this is a known limitation.
 5. **The oval**: appears at the bottom centre of the main screen while dictating — moving level bars while listening, ✕ and ✓ buttons in hands-free mode, dots while processing, a short message on error. It never takes focus from the app I'm typing in.
-6. **History window**: every dictation, newest first, grouped by day, each with a copy button and a delete button, plus a search box and a "Show more" button. Entries are kept until I delete them; delete is immediate, with no confirmation or undo.
-7. **Tray icon**: Open history, Settings, Quit. Closing the history window hides it; the app keeps running.
-8. **Settings view** for the hotkey and trigger (hold, double-tap or both), and nothing else.
-9. **Config file** for the microphone, cleanup model and launch at login (off by default). It also stores what the settings view saves.
+6. **History window**: every dictation, newest first, grouped by day, each with a copy button and a delete button, plus a search box. It shows the latest 200, and search covers the rest. Entries are kept until I delete them; delete is immediate, with no confirmation or undo.
+7. **Tray icon**: Open history, Quit. Closing the history window hides it; the app keeps running.
+8. **Config file** for the hotkey, microphone, cleanup model and launch at login (off by default). No settings screen.
 
 ### Explicitly NOT in v1 (do not build, do not design around)
 
-Login or accounts; stats, streaks or greetings; themes (one look only); showing the raw transcript; following the cursor across monitors; first-run wizard; personal dictionary; snippets; per-app tone; command mode; audio playback; multiple languages; mobile; cloud sync; auto-update; the public web demo / live link.
+Login or accounts; settings screen; stats, streaks or greetings; themes (one look only); showing the raw transcript; following the cursor across monitors; first-run wizard; personal dictionary; snippets; per-app tone; command mode; audio playback; multiple languages; mobile; cloud sync; auto-update; the public web demo / live link.
 
 ## 3. Reference: how Wispr Flow does it
 
@@ -67,35 +66,23 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 | Microphone | `sounddevice`, 16 kHz mono | Sends a 0–1 level about 20 times a second for the oval's bars. Opens on key-down ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)). Config matches the device by name; empty means the system default; the device list goes in the log |
 | Speech | Parakeet TDT 0.6B v2 via `onnx-asr` on CUDA ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | Recordings over ~20 s go through VAD first; shorter ones go straight to Parakeet. Fallback: `faster-whisper` with `distil-large-v3` |
 | Cleanup | `ollama` Python package with `qwen3:1.7b` ([ADR-0001](adr/0001-s1-speech-and-cleanup-models.md)) | `think=False`; `keep_alive=-1`; warm both models up at start; Quit unloads the model with `keep_alive=0` to free the VRAM |
-| Paste | Save clipboard → set text → Ctrl+V → restore clipboard after 200 ms ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)) | The 200 ms is unmeasured; revisit it if restores fail in daily use. Saves and restores every format that can be copied as a memory block (text, HTML, images, files) and skips the rest; keeps the dictation text out of Win+V history. Admin windows can't be pasted into (detected by comparing elevation); the oval says "Couldn't paste — copied to history" |
+| Paste | Save clipboard text → set text → Ctrl+V → restore that text after 200 ms ([ADR-0002](adr/0002-s2-hotkey-and-paste.md)) | The 200 ms is unmeasured; revisit it if restores fail in daily use. Other clipboard formats aren't restored; this is a known limitation. A paste waits until the hotkey is physically up, so Ctrl+V can't combine with it. Admin windows can't be pasted into and aren't detected; the text is in history |
 | Target app | Foreground window's process name at paste time (Win32 via `ctypes`) | Shown in history only |
 | History | `sqlite3` (standard library) | One table, see below. The entry is saved before the paste |
 
-**Hotkey rules (key and timings set by [ADR-0002](adr/0002-s2-hotkey-and-paste.md); two-key and three-key hotkeys are untested):**
-- The hotkey is one or more of Ctrl, Shift, Alt, Win and the F-keys. A lone Alt or lone Win is rejected. An invalid hotkey falls back to the default, with an error on the oval.
-- It counts as pressed when all its keys are down, in any order, and released as soon as any one comes up. A double-tap is press, release, press within 350 ms.
-- Default key: Right Ctrl. Default trigger: `both`.
-
-Trigger `both`:
+**Hotkey rules (key and timings set by [ADR-0002](adr/0002-s2-hotkey-and-paste.md); only Right Ctrl was tested):**
+- The hotkey is one key from `config.json`: a Ctrl, Shift or F-key. Alt and Win are rejected. An invalid key falls back to the default, with an error on the oval.
+- Default key: Right Ctrl. Hold and double-tap are always both on.
+- A double-tap is press, release, press within 350 ms.
 - Key down → start recording at once.
 - Released after ≥ 250 ms → push-to-talk done → process.
 - Released before 250 ms → wait up to 350 ms for a second tap. Second tap → hands-free. No second tap → discard.
-
-Trigger `hold`: key down → start recording. Released after ≥ 250 ms → process. Released before 250 ms → discard at once, with no wait for a second tap.
-
-Trigger `double_tap`: recording starts on the second tap. A long press does nothing.
-
-All triggers:
-- During push-to-talk, any key not in the hotkey cancels. The engine's own Ctrl+V doesn't count.
+- During push-to-talk, any other key cancels. The engine's own Ctrl+V doesn't count.
 - In hands-free, the next tap (or ✓) finishes; other keys are ignored.
 - Esc (or ✕) cancels the recording in progress and is swallowed only while recording. At any other time, including processing, Esc passes through to the target app.
 - Recording finishes by itself after 3 minutes of elapsed time and is processed normally.
 - Under ~0.3 s or silent → discard without calling the models.
-
-**Queue:**
-- A new recording can start while earlier dictations are processing. One worker handles them in order.
-- A paste waits until no hotkey keys are physically down, so Ctrl+V can't combine with held keys.
-- The oval shows listening over processing. An error from a queued dictation waits until the current recording ends.
+- A press while a dictation is processing is ignored.
 
 **Cleanup rules:**
 - Transcript wrapped in tags; the prompt says "output only the cleaned text". The full prompt, word for word, is in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md).
@@ -119,16 +106,14 @@ All triggers:
 - GPU or Parakeet unavailable → every press shows the error.
 
 **Protocol** (one JSON object per line; stdout carries only protocol messages — all logging goes to stderr and a log file):
-- Engine → app: `{"type":"state","state":"loading|idle|listening|handsfree|processing"}`, `{"type":"level","value":0.42}`, `{"type":"result","entry":{…}}`, `{"type":"error","message":"…"}`, `{"type":"config","hotkey":["right ctrl"],"trigger":"both","launch_at_login":false}`, `{"type":"reply","id":3,"data":…}`.
-- App → engine: `{"type":"request","id":3,"method":"list_history","params":{"query":"","limit":200}}`, `{"type":"request","id":4,"method":"delete_entry","params":{"id":12}}`, `{"type":"request","id":5,"method":"capture_hotkey","params":{}}`, `{"type":"request","id":6,"method":"save_settings","params":{"hotkey":["right ctrl"],"trigger":"both"}}`, `{"type":"command","name":"finish|cancel"}`.
-- `config` is sent at startup and after every settings change.
-- `capture_hotkey` pauses the hotkey and replies with the full set of keys held once they're released. Esc aborts. Invalid combinations reply with a message for the settings view.
-- `save_settings` takes effect at once, or when the active recording ends.
-- "Show more" sends `list_history` again with a higher `limit`. Search is a case-insensitive substring match on `clean_text` across all entries.
+- Engine → app: `{"type":"state","state":"loading|idle|listening|handsfree|processing"}`, `{"type":"level","value":0.42}`, `{"type":"result","entry":{…}}`, `{"type":"error","message":"…"}`, `{"type":"config","hotkey":"right ctrl","launch_at_login":false}`, `{"type":"reply","id":3,"data":…}`.
+- App → engine: `{"type":"request","id":3,"method":"list_history","params":{"query":"","limit":200}}`, `{"type":"request","id":4,"method":"delete_entry","params":{"id":12}}`, `{"type":"command","name":"finish|cancel"}`.
+- `config` is sent at startup.
+- The history window asks `list_history` for the latest 200. Search is a case-insensitive substring match on `clean_text` across all entries.
 
 **History table:** `id, created_at, raw_text, clean_text, target_app, status (ok | raw_fallback)`. Delete removes the whole row.
 
-**Config:** the engine is the only reader and writer of `config.json`, and creates it with defaults if missing. If the JSON is invalid, the engine uses defaults, shows an error and never overwrites the file; `save_settings` is refused with that error.
+**Config:** I edit `config.json` by hand. The engine reads it at startup and never writes it. If it's missing, the engine uses defaults. If the JSON is invalid, the engine uses defaults and shows an error.
 
 **Data folder:** `%APPDATA%\LocalFlow` (history, `config.json`, logs). When running from source (`npm run dev`), use `%APPDATA%\LocalFlow Dev`, so testing never touches real history. The app passes the folder to the engine as `--data-dir`. Quit the installed copy before `npm run dev`, or both will respond to the hotkey.
 
@@ -138,12 +123,12 @@ All triggers:
 
 ### Electron app (TypeScript, scaffolded with electron-vite's `react-ts` template)
 
-- **Main process:** creates the tray, the history window and the oval window; starts the engine (`uv run` in development, the bundled exe when installed); forwards engine messages to the windows and requests back. Restarts the engine up to 3 times after a crash, then shows an error on the oval.
+- **Main process:** creates the tray, the history window and the oval window; starts the engine (`uv run` in development, the bundled exe when installed); forwards engine messages to the windows and requests back. If the engine crashes, shows an error on the oval.
 - **Single instance:** Electron's single-instance lock; a second launch opens the history window. Opening by hand shows the history window; a launch at login stays in the tray.
 - **Preload:** exposes one small `window.localflow` object (`onEvent`, `request`, `command`, `copy`) through `contextBridge`. No Node access in the pages.
 - **Oval window:** frameless, `transparent: true`, `focusable: false`, always on top at the `screen-saver` level, shown with `showInactive()`, click-through (`setIgnoreMouseEvents`) except while the ✕/✓ buttons are visible. Built exactly the way spike S3 proved.
-- **History window:** an ordinary window; closing hides it. Settings is a second view inside it, not a third window.
-- **Fake bridge:** when the pages run in a normal browser (no `window.localflow`), they use sample data, cover the settings view and cycle the oval's states. This is how Playwright screenshots the UI. Keep it under ~60 lines, and list both pages' dev-server URLs in the README.
+- **History window:** an ordinary window; closing hides it.
+- **Fake bridge:** when the pages run in a normal browser (no `window.localflow`), they use sample data and cycle the oval's states. This is how Playwright screenshots the UI. Keep it under ~60 lines, and list both pages' dev-server URLs in the README.
 - **Launch at login:** `app.setLoginItemSettings` from the value in the engine's `config` message.
 
 **Later, for a web demo:** wrap the engine's `transcribe()` and `clean()` functions in a small FastAPI app. They don't change, so nothing built now is wasted.
@@ -153,15 +138,10 @@ All triggers:
 Calm, fast and clean, like Wispr Flow, Raycast or Linear. One look, no themes. Typography and spacing do the work; colour is used sparingly. The chosen direction is recorded in `PRODUCT.md` and `DESIGN.md` at the repo root (written with impeccable on day 5); those files decide colours, type, spacing and motion, and this section decides what's on each screen.
 
 **History window**
-- Search box at the top, with a gear icon that opens the settings view.
-- Entries newest first, grouped under Today / Yesterday / date, with "Show more" at the end of the list.
+- Search box at the top.
+- The latest 200 entries, newest first, grouped under Today / Yesterday / date.
 - Each entry: the cleaned text (two lines, click to expand), time, the app it went into, a copy button (shows "Copied" briefly) and a delete button. Raw-fallback entries get a small "uncleaned" tag.
-- Empty state: one line teaching the configured hotkey and trigger (e.g. "Hold Right Ctrl and speak").
-
-**Settings view**
-- The current hotkey with a "Change hotkey" button. Clicking it waits for the new keys; Esc aborts; an invalid combination shows a message here.
-- The trigger: hold, double-tap or both.
-- Changes save at once, with no Save button.
+- Empty state: one line teaching the configured hotkey (e.g. "Hold Right Ctrl and speak").
 
 **The oval**
 - Bottom centre of the main screen, just above the taskbar.
@@ -190,21 +170,7 @@ Throwaway prototypes in `spikes/`, half a day each, each ending in an ADR with m
 
 S1 is done: the results and known failures are in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md). Eval clips 19–24 are a holdout and are never used for tuning. They're now a weaker check, because the pre-pass was added after seeing clips 19 and 20 fail.
 
-S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its pass bar is met. Two-key and three-key hotkeys, image and file restore, and the restore wait from the list below were not run, and stay open there.
-
-**S1 also:**
-- Proves a PyInstaller-bundled exe transcribes on the GPU, rather than leaving that risk to T10.
-- Checks VRAM use on a 3-minute clip; lower the cap if it runs out of memory.
-- Measures the cleanup rate for the timeout, and tunes the output rejection numbers.
-- Confirms whether Parakeet adds capitals and punctuation.
-- Scores candidates with `eval/run.py` on real Parakeet transcripts: any `must_not_obey` failure rules a model out; the rest rank by normalized exact matches against `expected`, then by speed.
-
-**S2 also:**
-- Tests two-key and three-key hotkeys, not just a single key.
-- Checks that Esc can be swallowed only while recording, without adding typing lag.
-- Tests pasted newlines in Windows Terminal and Claude Code.
-- Measures whether opening the mic on key-down clips first words.
-- Tests clipboard restore with a copied image and a copied file, and measures how long to wait before restoring.
+S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its pass bar is met. The restore wait wasn't measured, and stays open there.
 
 ## 8. Tickets and milestones
 
@@ -214,19 +180,18 @@ S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its 
 |---|---|---|
 | T1 | Engine package; `transcribe <file.wav>` on the GPU with warm-up and timing, and VAD over ~20 s | M1 |
 | T2 | `clean()` with Ollama, the cleanup rules (pre-pass, chunks, rejection) and raw fallback; `eval/run.py` over the eval clips | M1 |
-| T3 | Hotkey state machine (hold, double-tap, Esc, combinations, trigger modes) as pure code with fake-clock tests | M1 |
-| T4 | Record → transcribe → clean → paste end to end with the queue, from a console | M1 |
-| T5 | History table and the JSON-lines protocol (events, requests, commands, including `config`, `capture_hotkey` and `save_settings`) | M2 |
-| T6 | Electron app: tray, starts the engine, relays messages, fake bridge | M2 |
-| T7 | The oval: all states, level bars, hands-free buttons | M2 |
-| T8 | History window: grouped list, copy, delete, search, empty state | M3 |
-| T9 | Config file, launch at login, clear error messages (Ollama down, no mic, admin window) | M3 |
-| T10 | Package: engine exe (PyInstaller) inside an electron-builder installer; README setup steps | M3 |
-| T11 | Settings view: change hotkey, choose trigger, applied at once | M3 |
+| T3 | Hotkey state machine (hold, double-tap, Esc, other-key cancel, 3-minute limit, presses ignored while processing) as pure code with fake-clock tests | M1 |
+| T4 | Record → transcribe → clean → paste end to end, from a console: history table with save-before-paste, target app, `last-failed.wav`, discard of short or silent recordings, paste waits for key-up, trailing space, clipboard text restore, log file | M1 |
+| T5 | History reads and deletes, and the JSON-lines protocol (events, requests, commands, including `config`); engine exits when stdin closes | M2 |
+| T6 | Electron app: tray, starts the engine with `--data-dir`, relays messages, fake bridge, single-instance lock, `loading` state, error after an engine crash, Quit unloads the cleanup model | M2 |
+| T7 | The oval: all states, level bars, hands-free buttons, startup messages | M2 |
+| T8 | History window: grouped list of the latest 200, copy, delete, search, empty state | M3 |
+| T9 | Read-only config file (hotkey with invalid-key fallback, microphone by name, cleanup model), launch at login that stays in the tray, clear error messages (invalid config, Ollama down, no mic, GPU or Parakeet unavailable, unsupported machine) | M3 |
+| T10 | Package: engine exe (PyInstaller) inside an electron-builder installer, proving the packaged engine transcribes on the GPU; README setup steps | M3 |
 
 - **M1 Works everywhere:** dictate into any app from a console window, within the 1.5 s target.
 - **M2 Live:** the oval works over every app and every dictation is saved.
-- **M3 v1.0:** history window, settings view, tray and installer; a fresh Windows account installs and dictates in 10 minutes.
+- **M3 v1.0:** history window, tray and installer; a fresh Windows account installs and dictates in 10 minutes.
 
 ## 9. Working with Claude Code
 
@@ -243,6 +208,7 @@ S2 is done: the results are in [ADR-0002](adr/0002-s2-hotkey-and-paste.md). Its 
 - If a change adds more than ~200 lines (not counting tests), stop and explain why first.
 - Prefer deleting code to adding it.
 - stdout in the engine is the protocol; log to stderr.
+- Never change section 2 of docs/PROJECT_BRIEF.md unless I explicitly ask.
 ```
 
 **Workflow (Matt Pocock's skills, installed with `npx skills@latest add mattpocock/skills`):**
@@ -297,3 +263,17 @@ localflow/
 - On start, the engine checks the GPU, Ollama and the models, and sends a clear error to the oval if anything is missing (see Startup in section 4).
 - Supported machines: NVIDIA GPUs with at least 6 GB VRAM. Anything else gets a clear error; there is no CPU mode.
 - Releases are built on my PC from `main` and uploaded with `gh release create`. No release pipeline.
+
+## 12. Later
+
+Cut from v1. Don't build or design around these.
+
+- Settings view: T11, the gear icon, the tray Settings item, the Change hotkey button, the trigger picker and instant save.
+- Combination hotkeys and the trigger setting.
+- The dictation queue.
+- Multi-format clipboard restore and Win+V exclusion.
+- Admin-window detection.
+- Automatic engine restarts.
+- Config writing, `capture_hotkey`, `save_settings` and fake-bridge settings coverage.
+- The "Show more" button.
+- The "S1 also" and "S2 also" check lists. T10 keeps the PyInstaller proof.
