@@ -1,0 +1,12 @@
+[project]
+name = "spike-s2-hotkey-paste"
+version = "0.0.0"
+description = "THROWAWAY spike S2. Never imported by real code."
+requires-python = "==3.12.*"
+dependencies = [
+    "keyboard",
+    "sounddevice",
+]
+
+[tool.uv]
+package = false
