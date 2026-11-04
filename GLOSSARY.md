@@ -49,7 +49,7 @@ Throwing away the Recording in progress because of something the user pressed.
 _Avoid_: Abort, using "discard" for this
 
 **Discard**:
-The Engine throwing a Recording away on its own because it was an accidental tap, too short or silent.
+The Engine throwing a Recording away on its own because it was an accidental tap, too short, silent or only filler words.
 _Avoid_: Using "cancel" for this
 
 ### Text

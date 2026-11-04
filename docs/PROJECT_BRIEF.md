@@ -87,7 +87,7 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 **Cleanup rules:**
 - Transcript wrapped in tags; the prompt says "output only the cleaned text". The full prompt, word for word, is in [ADR-0001](adr/0001-s1-speech-and-cleanup-models.md).
 - Pre-pass first: plain text matching deletes standalone "um", "uh" and "erm" in any case and "er" in lowercase only, plus a comma straight after. If it leaves nothing, discard the recording like a silent clip: no paste, no entry.
-- 3 words or fewer left after the pre-pass → skip the model and use the pre-passed text, with status `ok`.
+- 3 words or fewer left after the pre-pass → skip the model and use the pre-passed text with its first letter capitalised, with status `ok`.
 - Chunks: split the joined transcript at sentence ends. A sentence under 4 words stays attached to the next one. Group into chunks of up to ~40 words without splitting a sentence, pre-pass each one, clean it with the same prompt and rule, and join them. A chunk the pre-pass empties is dropped.
 - On error, timeout or rejected output → raw fallback: paste that chunk's transcript.
 - The timeout for each chunk is ~3 s + ~0.012 s per word.
