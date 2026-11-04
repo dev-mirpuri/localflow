@@ -89,6 +89,7 @@ Nothing ran out of memory, so the 3-minute Recording cap stays.
 - **Cleanup:** `qwen3:1.7b` with the prompt below, `think=False`, `temperature` 0, `seed` 0 and `keep_alive=-1`.
 - **Pre-pass (part of T2):** before the model, plain text matching deletes standalone "um", "uh" and "erm" in any case and "er" in lowercase only, plus a comma straight after. "er" is lowercase-only so that "ER" survives. If nothing is left, the text falls back to raw.
 - **Chunks (part of T2):** split the joined transcript at sentence ends. A sentence under 4 words stays attached to the next one, so "Sorry." and "I meant Sarah." stay together. Group these into chunks of up to about 40 words, never splitting a sentence. Clean each chunk with the same prompt and rejection rule, then join them. A rejected chunk falls back to its own raw text, so the rest stay clean.
+- **History status (part of T2):** an entry is `raw_fallback` if any of its chunks fell back, otherwise `ok`. There are only these two statuses, so the "uncleaned" tag never hides raw text, even on a mostly clean long entry.
 - **Rejection rule, and all of it:** at least 80% of the output's words appear in the text sent to the model, ignoring list numbers, and the output is between 0.60x and 1.3x that text's length in words. The minimum was raised from 0.55x after a chunk lost 16 of its 37 words and passed at 0.57x. Correct outputs on clips 07 and 08 sit exactly at 0.60x, so one word shorter falls back to raw, which is safe but uncleaned.
 - **Timeout:** 3 s + about 0.012 s per word for each chunk, the slowest rate on the tuning clips. The whole-transcript run can't set this rate, because its output was truncated.
 - **Short transcripts:** 3 words or fewer skip the model, since Parakeet punctuates them.
@@ -173,6 +174,4 @@ The spoken-forms line is a fixed part of the prompt, not a personal dictionary, 
 
 - **Tuning limits:** the prompt went through several rounds on the same 18 clips. Further tuning on them is likely to fit those clips rather than improve real Dictations.
 - **Chunk length limits:** a sentence over 40 words stays one chunk, and Parakeet's "p.m." counts as a sentence end. Neither caused a rejection here; the longest chunk in this run was 39 words.
-- **History status with partial fallback:** T2 has to decide what `status` an entry gets when only some of its chunks fall back to raw.
-
 The spike code is in `spikes/models/s1.py`; its reports are in `spikes/models/results/`, which is local and not committed.
