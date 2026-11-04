@@ -7,8 +7,6 @@ import wave
 from pathlib import Path
 
 import numpy as np
-import onnx_asr
-import onnxruntime as ort
 
 MODEL = "nemo-parakeet-tdt-0.6b-v2"
 RATE = 16000
@@ -24,6 +22,10 @@ def read_wav(path: Path) -> np.ndarray:
 
 def load_speech() -> tuple:
     """Loads Parakeet and warms it up. Returns it plain and with VAD, for transcribe()."""
+    # Imported here because these packages are Windows-only; see pyproject.toml.
+    import onnx_asr
+    import onnxruntime as ort
+
     ort.set_default_logger_severity(3)
     with contextlib.redirect_stdout(sys.stderr):  # preload_dlls() prints its problems
         ort.preload_dlls()
