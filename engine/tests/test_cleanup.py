@@ -151,6 +151,10 @@ TEN_WORDS = "one two three four five six seven eight nine ten."
         ("ONE, two: Three four five six", True),  # case and punctuation don't count
         ("1. one two\n2. three four\n3. five six", True),  # all known once numbers are ignored
         ("one two three 4 5 6 7", False),  # numbers inside a line are ordinary words
+        ("1. one\n2. two\n3. three", False),  # 0.30x; list numbers don't add to the length
+        ("1. one two three four five\n2. six", True),  # exactly 0.60x without the numbers
+        ("1. one two three four five\n2. six seven eight\n3. nine ten one two three", True),
+        # ^ exactly 1.3x without the numbers
         ("", False),
     ],
 )
@@ -161,6 +165,21 @@ def test_output_is_rejected_on_overlap_or_length(
 
     expected = (output, "ok") if accepted else (TEN_WORDS, "raw_fallback")
     assert clean(TEN_WORDS) == expected
+
+
+@pytest.mark.parametrize(
+    ("transcript", "output"),
+    [
+        ("Don't stop the build today.", "Don’t stop the build today."),
+        ("Don’t stop the build today.", "Don't stop the build today."),
+    ],
+)
+def test_curly_and_straight_apostrophes_count_as_the_same_word(
+    model: FakeModel, transcript: str, output: str
+) -> None:
+    model.reply = lambda text: output
+
+    assert clean(transcript) == (output, "ok")
 
 
 def test_overlap_and_length_are_measured_against_the_text_sent_to_the_model(

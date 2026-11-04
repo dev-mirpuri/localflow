@@ -68,7 +68,7 @@ EXAMPLES = [
 
 
 def words(text: str) -> list[str]:
-    return re.findall(r"[\w']+", text.casefold())
+    return re.findall(r"[\w']+", text.replace("’", "'").casefold())
 
 
 def prepass(text: str) -> str:
@@ -95,14 +95,14 @@ def call_model(text: str, timeout: float) -> str:
 
 
 def passes_rejection(output: str, sent: str) -> bool:
-    """At least 80% of the output's words were sent, ignoring list numbers, at 0.60x-1.3x length."""
-    without_numbers = words(LIST_NUMBER.sub("", output))
-    if not without_numbers:
+    """Ignoring list numbers, at least 80% of the output's words were sent, at 0.60x-1.3x length."""
+    output_words = words(LIST_NUMBER.sub("", output))
+    if not output_words:
         return False
-    known = set(words(sent))
-    overlap = sum(word in known for word in without_numbers) / len(without_numbers)
+    sent_words = words(sent)
+    overlap = sum(word in sent_words for word in output_words) / len(output_words)
     return (
-        overlap >= MIN_OVERLAP and MIN_LENGTH <= len(words(output)) / len(words(sent)) <= MAX_LENGTH
+        overlap >= MIN_OVERLAP and MIN_LENGTH <= len(output_words) / len(sent_words) <= MAX_LENGTH
     )
 
 
