@@ -1,5 +1,6 @@
 """Speech recognition: Parakeet on the GPU, with Silero VAD first for long Recordings."""
 
+import contextlib
 import sys
 import time
 import wave
@@ -24,7 +25,8 @@ def read_wav(path: Path) -> np.ndarray:
 def load_speech() -> tuple:
     """Loads Parakeet and warms it up. Returns it plain and with VAD, for transcribe()."""
     ort.set_default_logger_severity(3)
-    ort.preload_dlls()
+    with contextlib.redirect_stdout(sys.stderr):  # preload_dlls() prints its problems
+        ort.preload_dlls()
     start = time.perf_counter()
     # kSameAsRequested: about 560 MB less VRAM than ORT's default arena, at the same speed.
     cuda = ("CUDAExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"})
