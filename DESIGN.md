@@ -112,7 +112,7 @@ Typography and spacing do the work. Colour is neutral graphite with one soft blu
 Neutral graphite with a single soft blue accent.
 
 ### Primary
-- **Soft Signal Blue** (#7cb0ff): the caret, focus rings, text selection, "Copied" and the Oval's ✓. Nothing else.
+- **Soft Signal Blue** (#7cb0ff): the caret, focus rings, text selection, search matches, "Copied" and the Oval's ✓. Nothing else.
 
 ### Neutral
 - **Graphite Ground** (#18181a): the History window and the Oval.
