@@ -5,6 +5,8 @@ Run from spikes/models:
     uv run s1.py main    Parakeet speed and punctuation, then score the cleanup candidates
     uv run s1.py long    3-minute clip: VRAM, length limit, cleanup timeout rate
     uv run s1.py holdout one scoring pass of the final setup on the clips after the first 18
+    uv run s1.py prepass one pass over every clip with the filler pre-pass before the model
+    uv run s1.py chunks  3-minute clip cleaned in sentence chunks, without and with the pre-pass
 
 Each command also writes its report to results/<command>.txt.
 """
@@ -39,8 +41,11 @@ CANDIDATES = ["qwen3:1.7b", "llama3.2:3b"]
 CLEAN_TIMEOUT_S = 10
 FINAL_MODEL = "qwen3:1.7b"
 MIN_OVERLAP = 0.8
-MIN_LENGTH = 0.55
+MIN_LENGTH = 0.6
 MAX_LENGTH = 1.3
+CHUNK_WORDS = 40
+MIN_SENTENCE_WORDS = 4
+FILLERS = re.compile(r"(?<![\w'-])(?:(?i:um|uh|erm)|er)(?![\w'-]),?\s*")
 SHORT_PHRASES = ["Sounds good", "Thanks", "See you tomorrow", "Yes please", "Not right now"]
 TUNING_CLIPS = 18  # Clips after these are the holdout: scored once, never tuned on.
 ALL_CASES = [
@@ -512,6 +517,144 @@ def cmd_holdout():
     unload_ollama()
 
 
+def prepass(text):
+    """Deletes standalone um, uh and erm in any case, and lowercase er, plus a comma after."""
+    return " ".join(FILLERS.sub("", text).split())
+
+
+def split_chunks(text):
+    """Splits at sentence ends into chunks of up to CHUNK_WORDS; sentences are never split.
+
+    A sentence under MIN_SENTENCE_WORDS stays attached to the next one.
+    """
+    units, pending = [], []
+    for sentence in re.split(r"(?<=[.?!])\s+", text.strip()):
+        pending.append(sentence)
+        if len(words(sentence)) >= MIN_SENTENCE_WORDS:
+            units.append(" ".join(pending))
+            pending = []
+    if pending:
+        units.append(" ".join(pending))
+    groups, current, size = [], [], 0
+    for unit in units:
+        count = len(words(unit))
+        if current and size + count > CHUNK_WORDS:
+            groups.append(" ".join(current))
+            current, size = [], 0
+        current.append(unit)
+        size += count
+    if current:
+        groups.append(" ".join(current))
+    return groups
+
+
+def closeness(a, b):
+    return difflib.SequenceMatcher(None, strict(a), strict(b), autojunk=False).ratio()
+
+
+def cmd_prepass():
+    if not all(c["expected"] for c in ALL_CASES):
+        sys.exit("Some clips have no expected text in eval/cases.jsonl.")
+    for sample in ["Um, so uh yes", "UH, the ER is er open", "under the umbrella", "um"]:
+        say(f"pre-pass {sample!r} -> {prepass(sample)!r}")
+    unload_ollama()
+    speech = load_speech()
+    load_cleanup(FINAL_MODEL)
+    rows = []
+    for case in ALL_CASES:
+        transcript = transcribe(speech, read_wav(ROOT / case["file"]))[0]
+        text = prepass(transcript)
+        output, seconds, leaked = clean(FINAL_MODEL, text)
+        output = output or ""
+        row = {
+            "id": case["id"],
+            "exact": strict(output) == strict(case["expected"]),
+            "normalized": loose(output) == loose(case["expected"]),
+            "close": closeness(output, case["expected"]),
+            "seconds": seconds,
+            "kept": passes_rejection(output, text),
+            "flagged": case["category"] == "must_not_obey"
+            and loose(output) not in {loose(text), loose(case["expected"])},
+            "leaked": leaked,
+        }
+        rows.append(row)
+        hit = "=" if row["exact"] else "~" if row["normalized"] else "x"
+        say(
+            f"{case['id']} {case['category']} {hit} close {row['close']:.0%} {seconds:.2f}s "
+            f"{'passes' if row['kept'] else 'REJECTED'} {'OBEY-FLAG ' if row['flagged'] else ''}"
+            f"{'THINK ' if leaked else ''}"
+        )
+        say(f"   heard:  {transcript}")
+        say(f"   model in: {text}")
+        say(f"   output: {flat(output)}")
+    for name, part in [
+        ("Tuning 01-18", rows[:TUNING_CLIPS]),
+        ("Holdout 19-24", rows[TUNING_CLIPS:]),
+    ]:
+        say(
+            f"\n{name}: exact {sum(r['exact'] for r in part)}/{len(part)}, "
+            f"normalized {sum(r['normalized'] for r in part)}/{len(part)}, "
+            f"mean closeness {statistics.mean(r['close'] for r in part):.1%}, "
+            f"median {statistics.median(r['seconds'] for r in part):.2f}s, "
+            f"slowest {max(r['seconds'] for r in part):.2f}s, "
+            f"rejected {[r['id'] for r in part if not r['kept']]}, "
+            f"obey flags {[r['id'] for r in part if r['flagged']]}"
+        )
+    unload_ollama()
+
+
+def cmd_chunks():
+    unload_ollama()
+    baseline = vram_mb()
+    speech = load_speech()
+    load_cleanup(FINAL_MODEL)
+    audio, expected = [], []
+    for _ in range(100):
+        for case in CASES:
+            if sum(len(a) for a in audio) / RATE >= max(DURATIONS):
+                break
+            audio.append(read_wav(ROOT / case["file"]))
+            expected.append(case["expected"])
+    audio, expected = np.concatenate(audio), " ".join(expected)
+    vad = onnx_asr.load_vad("silero", providers=["CPUExecutionProvider"])
+    with watch_vram() as peak:
+        start = time.perf_counter()
+        pieces = speech.with_vad(vad, batch_size=1).recognize(audio, sample_rate=RATE)
+        transcript = " ".join(s.text for s in pieces)
+        speech_s = time.perf_counter() - start
+        say(f"{len(audio) / RATE:.0f} s clip, VAD then Parakeet {speech_s:.2f} s")
+        say(f"Transcript {len(words(transcript))} words")
+        say(f"Raw transcript closeness to expected: {closeness(transcript, expected):.1%}")
+        for use_prepass in [False, True]:
+            say(f"\n== Chunks, pre-pass {'on' if use_prepass else 'off'} ==")
+            chunks = split_chunks(transcript)
+            joined, rejected, times = [], [], []
+            for number, chunk in enumerate(chunks, start=1):
+                text = prepass(chunk) if use_prepass else chunk
+                output, seconds, _ = clean(FINAL_MODEL, text) if text else (None, 0.0, False)
+                kept = bool(output) and passes_rejection(output, text)
+                times.append(seconds)
+                joined.append(output if kept else chunk)
+                if not kept:
+                    rejected.append(number)
+                say(
+                    f"{number:02d} {len(words(chunk))}w {seconds:.2f}s "
+                    f"ov {overlap(output or '', text):.0%} len {length_ratio(output or '', text):.2f} "
+                    f"{'kept' if kept else 'REJECTED'}"
+                )
+                say(f"   in:  {flat(text)}")
+                say(f"   out: {flat(output or '')}")
+            result = " ".join(joined)
+            say(
+                f"Chunks {len(chunks)}, largest {max(len(words(c)) for c in chunks)} words, "
+                f"rejected {len(rejected)} {rejected}, cleanup total {sum(times):.2f} s, "
+                f"slowest chunk {max(times):.2f} s, length {length_ratio(result, transcript):.2f}x, "
+                f"closeness to expected {closeness(result, expected):.1%}"
+            )
+    say(f"\nPeak VRAM {peak[0]} MB (+{peak[0] - baseline})")
+    unload_ollama()
+
+
 def cmd_short():
     import sounddevice as sd
 
@@ -530,7 +673,14 @@ def cmd_short():
 
 def main():
     global report_file
-    commands = {"main": cmd_main, "long": cmd_long, "short": cmd_short, "holdout": cmd_holdout}
+    commands = {
+        "main": cmd_main,
+        "long": cmd_long,
+        "short": cmd_short,
+        "holdout": cmd_holdout,
+        "prepass": cmd_prepass,
+        "chunks": cmd_chunks,
+    }
     if len(sys.argv) != 2 or sys.argv[1] not in commands:
         sys.exit(__doc__)
     sys.stdout.reconfigure(encoding="utf-8")
