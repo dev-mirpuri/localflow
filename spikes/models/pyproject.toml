@@ -1,0 +1,18 @@
+[project]
+name = "spike-s1-models"
+version = "0.0.0"
+description = "THROWAWAY spike S1. Never imported by real code."
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy",
+    "ollama",
+    "onnx-asr[gpu,hub]",
+    "onnxruntime-gpu[cuda,cudnn]",
+    # The newest nvidia-cublas (13.8.2.x) has no Windows wheel; this is the last one that does.
+    "nvidia-cublas==13.8.0.4",
+    "pyinstaller",
+    "sounddevice",
+]
+
+[tool.uv]
+package = false
