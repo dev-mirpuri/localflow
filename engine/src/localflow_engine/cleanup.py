@@ -1,9 +1,11 @@
 """Cleanup: turns a Transcript into Cleaned text with Ollama, never losing words to the model."""
 
+import logging
 import re
-import sys
 
 import ollama
+
+log = logging.getLogger(__name__)
 
 MODEL = "qwen3:1.7b"
 SHORT_WORDS = 3
@@ -131,10 +133,10 @@ def clean_chunk(text: str) -> str | None:
     try:
         output = call_model(text, TIMEOUT_S + TIMEOUT_S_PER_WORD * len(words(text)))
     except Exception as error:  # Whatever went wrong, the words must survive it.
-        print(f"cleanup: raw fallback after {type(error).__name__}", file=sys.stderr)
+        log.warning("raw fallback after %s", type(error).__name__)
         return None
     if not passes_rejection(output, text):
-        print("cleanup: raw fallback after rejected output", file=sys.stderr)
+        log.warning("raw fallback after rejected output")
         return None
     return output
 

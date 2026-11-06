@@ -1,12 +1,15 @@
 """Speech recognition: Parakeet on the GPU, with Silero VAD first for long Recordings."""
 
 import contextlib
+import logging
 import sys
 import time
 import wave
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 MODEL = "nemo-parakeet-tdt-0.6b-v2"
 RATE = 16000
@@ -18,6 +21,15 @@ def read_wav(path: Path) -> np.ndarray:
         if (w.getnchannels(), w.getsampwidth(), w.getframerate()) != (1, 2, RATE):
             raise ValueError(f"{path} must be 16 kHz, mono, 16-bit")
         return np.frombuffer(w.readframes(w.getnframes()), np.int16).astype(np.float32) / 32768
+
+
+def write_wav(path: Path, audio: np.ndarray) -> None:
+    """Writes float32 audio as the 16 kHz, mono, 16-bit WAV that read_wav() reads."""
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(RATE)
+        w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
 
 
 def load_speech() -> tuple:
@@ -38,11 +50,11 @@ def load_speech() -> tuple:
     if used != "CUDAExecutionProvider":
         raise RuntimeError(f"Parakeet is not on CUDA, it is on {used}")
     vad = onnx_asr.load_vad("silero", providers=["CPUExecutionProvider"])
-    print(f"load: {time.perf_counter() - start:.2f} s", file=sys.stderr)
+    log.info("load %.2f s", time.perf_counter() - start)
 
     start = time.perf_counter()
     parakeet.recognize(np.zeros(RATE, np.float32), sample_rate=RATE)
-    print(f"warm-up: {time.perf_counter() - start:.2f} s", file=sys.stderr)
+    log.info("warm-up %.2f s", time.perf_counter() - start)
     return parakeet, parakeet.with_vad(vad, batch_size=1)
 
 
