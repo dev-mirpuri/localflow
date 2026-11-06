@@ -42,6 +42,7 @@ class Hotkey:
         if injected:
             if not down:
                 self.held.discard(key)
+                self.swallowing_esc = self.swallowing_esc and key != "esc"
             return expired, False
         actions, swallow = self._key(key, down, now)
         return expired + actions, swallow

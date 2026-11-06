@@ -207,7 +207,7 @@ def test_a_press_after_the_gap_but_before_a_tick_discards_and_starts_afresh():
     assert release(hotkey, CTRL, 11) == (["finish"], False)
 
 
-def test_tick_and_cross_finish_and_cancel_hands_free():
+def test_check_and_cross_finish_and_cancel_hands_free():
     hotkey = Hotkey("right ctrl")
     double_tap(hotkey)
     assert hotkey.finish(11) == ["finish"]
@@ -219,7 +219,7 @@ def test_tick_and_cross_finish_and_cancel_hands_free():
     assert press(hotkey, CTRL, 12) == (["start"], False)
 
 
-def test_tick_and_cross_do_nothing_outside_hands_free():
+def test_check_and_cross_do_nothing_outside_hands_free():
     hotkey = Hotkey("right ctrl")
     assert hotkey.finish(1) == []
     press(hotkey, CTRL, 10)
@@ -250,3 +250,11 @@ def test_a_real_key_up_flagged_by_mistake_does_not_leave_the_key_held():
     release(hotkey, A, 9.1, injected=True)
     press(hotkey, CTRL, 10)
     assert press(hotkey, A, 10.5) == (["cancel"], False)
+
+
+def test_a_swallowed_esc_whose_key_up_is_flagged_is_not_swallowed_again():
+    hotkey = Hotkey("right ctrl")
+    double_tap(hotkey)
+    press(hotkey, ESC, 11)
+    release(hotkey, ESC, 11.1, injected=True)
+    assert press(hotkey, ESC, 12) == ([], False)
