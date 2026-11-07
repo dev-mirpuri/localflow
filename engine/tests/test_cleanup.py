@@ -217,7 +217,7 @@ def test_an_error_or_timeout_falls_back_to_the_transcript(
 
 
 def test_a_failure_logs_its_type_but_never_the_words(
-    model: FakeModel, capsys: pytest.CaptureFixture[str]
+    model: FakeModel, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     model.reply = raises(httpx.ReadTimeout("private words"))
 
@@ -225,12 +225,12 @@ def test_a_failure_logs_its_type_but_never_the_words(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "ReadTimeout" in captured.err
-    assert "private" not in captured.err
+    assert "ReadTimeout" in caplog.text
+    assert "private" not in caplog.text + captured.err
 
 
 def test_a_rejection_logs_nothing_of_the_words(
-    model: FakeModel, capsys: pytest.CaptureFixture[str]
+    model: FakeModel, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
 ) -> None:
     model.reply = lambda text: "banana"
 
@@ -238,9 +238,9 @@ def test_a_rejection_logs_nothing_of_the_words(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "reject" in captured.err
-    assert "private" not in captured.err
-    assert "banana" not in captured.err
+    assert "reject" in caplog.text
+    assert "private" not in caplog.text + captured.err
+    assert "banana" not in caplog.text + captured.err
 
 
 def sentence(count: int, word: str = "word") -> str:
