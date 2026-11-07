@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T21:10:00Z",
+  "title": "Design System: LocalFlow",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Soft Signal Blue",
+        "canonical": "#7cb0ff",
+        "tonalRamp": [
+          "#0f2a52",
+          "#1a3f76",
+          "#28559a",
+          "#3c6dbc",
+          "#5a8fe0",
+          "#7cb0ff",
+          "#a9ccff",
+          "#d9e8ff"
+        ]
+      },
+      "neutral-ground": {
+        "role": "neutral",
+        "displayName": "Graphite Ground",
+        "canonical": "#18181a",
+        "tonalRamp": [
+          "#101012",
+          "#18181a",
+          "#232326",
+          "#36363b",
+          "#55555b",
+          "#7c7c84",
+          "#a3a3ab",
+          "#ececee"
+        ]
+      },
+      "neutral-raised": {
+        "role": "neutral",
+        "displayName": "Raised Graphite",
+        "canonical": "#232326",
+        "tonalRamp": [
+          "#101012",
+          "#18181a",
+          "#232326",
+          "#36363b",
+          "#55555b",
+          "#7c7c84",
+          "#a3a3ab",
+          "#ececee"
+        ]
+      },
+      "neutral-line": {
+        "role": "neutral",
+        "displayName": "Quiet Line",
+        "canonical": "#36363b",
+        "tonalRamp": [
+          "#101012",
+          "#18181a",
+          "#232326",
+          "#36363b",
+          "#55555b",
+          "#7c7c84",
+          "#a3a3ab",
+          "#ececee"
+        ]
+      },
+      "neutral-text": {
+        "role": "neutral",
+        "displayName": "Near White",
+        "canonical": "#ececee",
+        "tonalRamp": [
+          "#101012",
+          "#18181a",
+          "#232326",
+          "#36363b",
+          "#55555b",
+          "#7c7c84",
+          "#a3a3ab",
+          "#ececee"
+        ]
+      },
+      "neutral-dim": {
+        "role": "neutral",
+        "displayName": "Soft Grey",
+        "canonical": "#a3a3ab",
+        "tonalRamp": [
+          "#101012",
+          "#18181a",
+          "#232326",
+          "#36363b",
+          "#55555b",
+          "#7c7c84",
+          "#a3a3ab",
+          "#ececee"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "Entry text, search and the empty state." },
+      "title": { "displayName": "Title", "purpose": "Day labels." },
+      "label": { "displayName": "Label", "purpose": "Time, Target app, tag, Copy and Delete." },
+      "oval-message": { "displayName": "Oval message", "purpose": "The Oval's one line of text." }
+    },
+    "shadows": [
+      {
+        "name": "oval-float",
+        "value": "0 0 0 1px rgb(255 255 255 / 0.14), 0 4px 14px rgb(0 0 0 / 0.3)",
+        "purpose": "The Oval over other apps."
+      }
+    ],
+    "motion": [
+      { "name": "row-hover", "value": "100ms ease-out", "purpose": "Row fill and Delete reveal." },
+      {
+        "name": "bars",
+        "value": "90ms linear",
+        "purpose": "Level bars following the Engine's level."
+      },
+      {
+        "name": "bars-to-dots",
+        "value": "260ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Bars settling into dots."
+      },
+      { "name": "dot-pulse", "value": "1100ms ease-in-out infinite", "purpose": "Processing dots." }
+    ],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "Search box",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "Pinned at the top of the History window.",
+      "html": "<input class=\"ds-search\" type=\"search\" placeholder=\"Search history\" aria-label=\"Search history\" />",
+      "css": ".ds-search { height: 36px; width: 100%; padding: 0 12px; background: #232326; color: #ececee; border: 1px solid #36363b; border-radius: 8px; font: 400 14px/21px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; caret-color: #7cb0ff; } .ds-search::placeholder { color: #a3a3ab; } .ds-search:focus { border-color: #7cb0ff; outline: none; }"
+    },
+    {
+      "name": "Entry row",
+      "kind": "custom",
+      "refersTo": "entry-row",
+      "description": "One Entry, with Copy always visible and Delete on hover or focus.",
+      "html": "<div class=\"ds-row\"><p class=\"ds-text\">Running ten minutes late, start without me.</p><div class=\"ds-meta\"><span>16:12</span><span>slack</span><button class=\"ds-copy\">Copy</button><button class=\"ds-delete\">Delete</button></div></div>",
+      "css": ".ds-row { max-width: 62ch; padding: 10px 12px; border-radius: 8px; background: #18181a; color: #ececee; font: 400 14px/21px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; transition: background 100ms ease-out; } .ds-row:hover { background: #232326; } .ds-text { margin: 0; } .ds-meta { display: flex; gap: 12px; align-items: center; color: #a3a3ab; font-size: 12px; line-height: 18px; } .ds-copy, .ds-delete { height: 28px; background: none; border: 0; font: inherit; cursor: pointer; } .ds-copy { margin-left: auto; color: #ececee; } .ds-delete { margin-left: 8px; color: #a3a3ab; opacity: 0; } .ds-row:hover .ds-delete, .ds-row:focus-within .ds-delete { opacity: 1; } .ds-copy:focus-visible, .ds-delete:focus-visible { outline: 2px solid #7cb0ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Day label",
+      "kind": "custom",
+      "refersTo": "day-label",
+      "description": "Sticky landmark above each day's Entries.",
+      "html": "<h3 class=\"ds-day\">Yesterday</h3>",
+      "css": ".ds-day { margin: 20px 0 0; padding: 6px 12px; background: #18181a; color: #ececee; font: 600 13px/18px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; }"
+    },
+    {
+      "name": "Uncleaned tag",
+      "kind": "chip",
+      "refersTo": "tag-uncleaned",
+      "description": "Marks a Raw fallback Entry.",
+      "html": "<span class=\"ds-tag\" title=\"Cleanup didn't finish, so this is the raw transcript.\">uncleaned</span>",
+      "css": ".ds-tag { padding: 0 6px; border: 1px solid #36363b; border-radius: 4px; color: #a3a3ab; font: 400 12px/18px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; }"
+    },
+    {
+      "name": "Oval",
+      "kind": "custom",
+      "refersTo": "oval",
+      "description": "Shown only while it has something to say; here with a message.",
+      "html": "<div class=\"ds-oval\">Starting up…</div>",
+      "css": ".ds-oval { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 999px; background: #18181a; color: #ececee; font: 400 13px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 4px 14px rgb(0 0 0 / 0.3); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Out of the Way",
+    "overview": "LocalFlow is used while attention is on another app, so the interface earns its calm by asking for nothing. The Oval appears only while it has something to say. The History window is opened to find and copy words, then closed.\n\nTypography and spacing do the work. Colour is neutral graphite with one soft blue accent that marks only what is active or just confirmed. Convention is the commitment: patterns should feel familiar from Raycast, Linear and Wispr Flow, and from Windows itself.",
+    "keyCharacteristics": [
+      "Dark neutral ground, chosen because the app sits beside terminals and editors.",
+      "The Windows system font, so no fonts are bundled.",
+      "Rows separated by space, without cards or dividers.",
+      "Motion only answers a state change, and stays quick."
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "Blue means active or just confirmed. It never decorates, and \"uncleaned\" and errors do not use it.",
+        "section": "colors"
+      },
+      {
+        "name": "The 75 Character Rule",
+        "body": "Entry text and its metadata row share a maximum width of 62ch, which is about 75 characters of this face at 14px (measured on the spike's sample text, because `ch` is the width of a zero and running text is narrower). The rest of a wide window stays empty.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do morph the same elements from bars to dots rather than swapping them.",
+      "Do keep every action's layout space reserved, so hover never shifts a row.",
+      "Do show the Oval only while it has something to say."
+    ],
+    "donts": [
+      "Don't add a second accent, or use blue for decoration.",
+      "Don't add cards, dividers between rows, or shadows in the History window.",
+      "Don't give Delete the same emphasis as Copy.",
+      "Don't add entrance animations or hover effects beyond the row fill."
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "spike-s3-oval",
+  "private": true,
+  "description": "THROWAWAY spike S3: can an Electron oval appear, animate and take a click without stealing focus?",
+  "main": "main.js",
+  "scripts": {
+    "start": "node ../../app/node_modules/electron/cli.js ."
+  }
+}

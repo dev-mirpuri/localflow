@@ -4,14 +4,19 @@ Free, fully local dictation for Windows. See [the project brief](docs/PROJECT_BR
 
 ## Prerequisites
 
-[uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/) and [Node.js](https://nodejs.org/).
+[uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/), which includes npm.
 
 ## Setup
 
+From the repo root:
+
 ```sh
-pnpm install            # also installs the git hooks
 uv sync --project engine
+npm ci --prefix app
+git config core.hooksPath .githooks
 ```
+
+The last command turns on the git hooks: `pre-commit` runs the checks below, and `pre-push` refuses any push to `main`.
 
 ## Dev commands
 
@@ -19,17 +24,18 @@ Run the engine commands from `engine/`:
 
 | Task | Command |
 |---|---|
-| Lint | `uv run ruff check .` |
-| Format | `uv run ruff format .` |
-| Type check | `uv run pyright` |
-| Test (no GPU) | `uv run pytest` |
+| Lint | `uv run ruff check . ../eval` |
+| Format | `uv run ruff format . ../eval` |
+| Test (default, skips GPU and Windows-input tests) | `uv run pytest` |
 | Test (GPU only) | `uv run pytest -m gpu` |
+| Test (Windows input only) | `uv run pytest -m windows` |
 
-Run the TypeScript commands from the repo root:
+Run the app commands from `app/`:
 
 | Task | Command |
 |---|---|
-| Lint and format check | `pnpm exec biome check .` |
-| Lint and format, applying fixes | `pnpm exec biome check --write .` |
-
-Run the pre-commit checks on staged files, also from the root, with `pnpm exec lefthook run pre-commit`.
+| Run in development | `npm run dev` |
+| Lint | `npm run lint` |
+| Format | `npm run format` |
+| Type check | `npm run typecheck` |
+| Build | `npm run build` |

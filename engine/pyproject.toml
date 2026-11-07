@@ -7,10 +7,19 @@ authors = [
     { name = "Dev Mirpuri", email = "149519587+dev-mirpuri@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "keyboard==0.13.5; sys_platform == 'win32'",
+    "numpy>=2.5.4",
+    # The newest nvidia-cublas (13.8.2.x) has no Windows wheel; this is the last one that does.
+    "nvidia-cublas==13.8.0.4; sys_platform == 'win32'",
+    "ollama>=0.6.3",
+    "onnx-asr[gpu,hub]==0.12.0; sys_platform == 'win32'",
+    "onnxruntime-gpu[cuda,cudnn]==1.31.1; sys_platform == 'win32'",
+    "sounddevice==0.5.6; sys_platform == 'win32'",
+]
 
 [project.scripts]
-localflow-engine = "localflow_engine:main"
+localflow-engine = "localflow_engine.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.13.6,<0.14.0"]
@@ -18,26 +27,16 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "pyright>=1.1.414",
+    "httpx>=0.28.1",
     "pytest>=9.2.0",
-    "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.17.3",
+    "soundfile>=0.14.0",
 ]
-
-[tool.ruff]
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
-
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "strict"
-venvPath = "."
-venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--strict-markers -m 'not gpu'"
-asyncio_default_fixture_loop_scope = "function"
-markers = ["gpu: needs a CUDA GPU; deselected unless run with -m gpu"]
+addopts = "--strict-markers -m 'not gpu and not windows'"
+markers = [
+    "gpu: needs a CUDA GPU; deselected unless run with -m gpu",
+    "windows: needs real Windows input; deselected unless run with -m windows",
+]

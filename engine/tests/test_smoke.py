@@ -1,5 +1,5 @@
-import localflow_engine
+from localflow_engine import cli
 
 
 def test_package_imports() -> None:
-    assert callable(localflow_engine.main)
+    assert callable(cli.main)
