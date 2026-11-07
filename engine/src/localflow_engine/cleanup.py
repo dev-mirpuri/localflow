@@ -14,6 +14,7 @@ MIN_SENTENCE_WORDS = 4
 TIMEOUT_S = 3
 TIMEOUT_S_PER_WORD = 0.012
 WARM_UP_TIMEOUT_S = 180
+UNLOAD_TIMEOUT_S = 5
 MIN_OVERLAP = 0.8
 MIN_LENGTH = 0.6
 MAX_LENGTH = 1.3
@@ -158,6 +159,11 @@ def clean(transcript: str) -> tuple[str, str]:
             status = "raw_fallback"
         results.append(chunk if output is None else output)
     return " ".join(results), status
+
+
+def unload_cleanup() -> None:
+    """Frees the model's VRAM: a request with keep_alive=0 and no prompt unloads it."""
+    ollama.Client(timeout=UNLOAD_TIMEOUT_S).generate(model=MODEL, keep_alive=0)
 
 
 def warm_up_cleanup() -> None:

@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import queue
 import sys
 import threading
@@ -9,12 +10,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from types import SimpleNamespace
 
-from localflow_engine import dictate, history
-from localflow_engine.cleanup import clean, warm_up_cleanup
+from localflow_engine import dictate, history, protocol
+from localflow_engine.cleanup import clean, unload_cleanup, warm_up_cleanup
 from localflow_engine.hotkey import Hotkey
 from localflow_engine.speech import load_speech, read_wav, transcribe, write_wav
 
-HOTKEY = "right ctrl"  # Until T9 adds config.
 LOG_BYTES = 1_000_000
 
 log = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ def main() -> None:
     commands.add_parser("dictate").add_argument("--data-dir", type=Path, required=True)
     args = parser.parse_args()
 
+    sys.stdin.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
     sys.stdout.reconfigure(encoding="utf-8")  # pyright: ignore[reportAttributeAccessIssue]
     if args.command == "dictate":
         args.data_dir.mkdir(parents=True, exist_ok=True)
@@ -64,19 +65,62 @@ def run_transcribe(path: Path) -> None:
 
 
 def run_dictate(data_dir: Path) -> None:
-    # Imported here because these are Windows-only; see pyproject.toml.
+    """The Engine as the App runs it: JSON lines on stdin and stdout, until stdin closes."""
+    # Imported here because it is Windows-only; see pyproject.toml.
+    from localflow_engine import windows
+
+    sys.stdout = sys.stderr  # Only protocol.send() writes to the real stdout.
+    hotkey, lock, queued = Hotkey(protocol.HOTKEY), threading.Lock(), queue.Queue()
+    startup = SimpleNamespace(state="loading", held=False, shown=False)
+
+    def on_key(name: str, scan_code: int, down: bool, injected: bool) -> bool:
+        if dictate.held_back(startup, hotkey.name, name, down, injected, protocol.send):
+            return False
+        now = time.monotonic()
+        return dictate.on_key(hotkey, lock, queued, name, scan_code, down, injected, now)
+
+    windows.hook(on_key)
+    threading.Thread(
+        target=run_dictation, args=(data_dir, hotkey, lock, queued, startup), daemon=True
+    ).start()
+    try:
+        protocol.serve(
+            sys.stdin,
+            data_dir,
+            lambda name: dictate.on_command(hotkey, lock, queued, name, time.monotonic()),
+        )
+    finally:
+        windows.unhook()
+        try:
+            unload_cleanup()
+        except Exception as error:
+            log.warning("unloading the cleanup model failed with %s", type(error).__name__)
+    log.info("stdin closed, exiting")
+    logging.shutdown()
+    # Skips interpreter shutdown, which crashes if the models are still loading on their thread.
+    os._exit(0)
+
+
+def run_dictation(data_dir: Path, hotkey: Hotkey, lock, queued, startup) -> None:
+    """Loads the models, then runs Dictations for as long as the Engine runs."""
     from localflow_engine import windows
     from localflow_engine.mic import Mic
 
-    speech = load_speech()
+    def on_download() -> None:
+        startup.state = "downloading"
+        protocol.send(dictate.state("downloading"))
+
+    speech = load_speech(on_download)
+    if startup.state == "downloading":
+        startup.state = "loading"
+        protocol.send(dictate.state("idle"))  # Ends "Downloading speech model…".
     try:
         warm_up_cleanup()
     except Exception as error:  # Cleanup falls back to the Transcript on its own.
         log.warning("cleanup warm-up failed with %s", type(error).__name__)
 
     db = history.open_history(data_dir / "history.db")
-    hotkey, lock, queued = Hotkey(HOTKEY), threading.Lock(), queue.Queue()
-    mic = Mic(lambda value: print(f"{'#' * round(value * 20):20}", end="\r", file=sys.stderr))
+    mic = Mic(lambda value: protocol.send({"type": "level", "value": round(value, 2)}))
     parts = SimpleNamespace(
         start=mic.start,
         stop=mic.stop,
@@ -88,15 +132,11 @@ def run_dictate(data_dir: Path) -> None:
             db, raw_text, clean_text, target_app, status
         ),
         paste=windows.paste,
+        send=protocol.send,
     )
-    windows.hook(
-        lambda name, scan_code, down, injected: dictate.on_key(
-            hotkey, lock, queued, name, scan_code, down, injected, time.monotonic()
-        )
-    )
-    log.info("ready: hold or double-tap Right Ctrl, Ctrl+C to quit")
-    try:
-        while True:
-            dictate.step(hotkey, lock, queued, parts, time.monotonic)
-    except KeyboardInterrupt:
-        windows.unhook()
+    startup.state = "ready"
+    if startup.shown:
+        protocol.send(dictate.state("idle"))  # Ends "Starting up…".
+    log.info("ready: hold or double-tap Right Ctrl; close stdin to quit")
+    while True:
+        dictate.step(hotkey, lock, queued, parts, time.monotonic)

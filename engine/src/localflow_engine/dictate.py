@@ -33,6 +33,27 @@ def worth_transcribing(audio: np.ndarray) -> bool:
     return 20 * np.log10(loudest + 1e-9) > SILENT_DBFS
 
 
+def state(name: str) -> dict:
+    """A protocol state message. The mic is closed whenever one other than "listening" goes out."""
+    return {"type": "state", "state": name}
+
+
+def held_back(startup, hotkey_name: str, name: str, down: bool, injected: bool, send) -> bool:
+    """Whether a key skips the Hotkey: while the models load, and until a press meanwhile is up.
+
+    startup has the loading state ("downloading", "loading" or "ready"), held, and shown,
+    which is set once "loading" is sent. A press while downloading sends nothing.
+    """
+    if startup.state == "ready" and not startup.held:
+        return False
+    if name == hotkey_name and not injected:
+        if down and not startup.held and startup.state == "loading":
+            startup.shown = True
+            send(state("loading"))
+        startup.held = down
+    return True
+
+
 def on_key(
     hotkey: Hotkey,
     lock: threading.Lock,
@@ -51,6 +72,18 @@ def on_key(
     return swallow
 
 
+def on_command(
+    hotkey: Hotkey, lock: threading.Lock, queued: queue.Queue, name: str, now: float
+) -> None:
+    """The App's "finish" and "cancel" commands: the Oval's ✓ and ✕."""
+    if name not in ("finish", "cancel"):
+        raise ValueError("unknown command")
+    with lock:
+        actions = hotkey.finish(now) if name == "finish" else hotkey.cancel(now)
+    if actions:
+        queued.put(actions)
+
+
 def step(
     hotkey: Hotkey,
     lock: threading.Lock,
@@ -60,8 +93,8 @@ def step(
 ) -> None:
     """One turn of the main loop: waits briefly for the hook's actions, ticks, and acts on them.
 
-    parts has the mic's start() and stop(), transcribe, save_failed, clean, target_app, save
-    and paste.
+    parts has the mic's start() and stop(), transcribe, save_failed, clean, target_app, save,
+    paste, and send for protocol messages.
     """
     actions = []
     try:  # Bounded: on Windows a get() with no timeout can't be interrupted by Ctrl+C.
@@ -75,21 +108,27 @@ def step(
     for action in actions:
         log.info(action)
         if action == "start":
+            parts.send(state("listening"))
             parts.start()
+        elif action == "hands_free":
+            parts.send(state("handsfree"))
         elif action in ("cancel", "discard"):
             parts.stop()
+            parts.send(state("idle"))
         elif action == "finish":
             try:
                 finish(hotkey, parts)
             finally:
                 with lock:
                     hotkey.done()
+                parts.send(state("idle"))
 
 
 def finish(hotkey: Hotkey, parts) -> None:
     """Transcribes, cleans, saves and pastes a finished Recording."""
     started = time.perf_counter()
     audio = parts.stop()
+    parts.send(state("processing"))
     if not worth_transcribing(audio):
         log.info("discarded a short or silent Recording")
         return
@@ -98,6 +137,7 @@ def finish(hotkey: Hotkey, parts) -> None:
     except Exception as error:
         log.error("transcription failed with %s", type(error).__name__)
         parts.save_failed(audio)
+        parts.send({"type": "error", "message": "Couldn't transcribe that. Try again."})
         return
     text, status = parts.clean(transcript)
     text = text.rstrip()
@@ -107,7 +147,8 @@ def finish(hotkey: Hotkey, parts) -> None:
     while hotkey.name in hotkey.held:  # Ctrl+V must not combine with the Hotkey.
         time.sleep(KEY_UP_POLL_S)
     try:
-        parts.save(transcript, text, parts.target_app(), status)
+        entry = parts.save(transcript, text, parts.target_app(), status)
+        parts.send({"type": "result", "entry": entry})
     except Exception as error:  # Paste anyway: the words still reach the Target app.
         log.error("saving the Entry failed with %s", type(error).__name__)
     try:

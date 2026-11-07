@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 import wave
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 MODEL = "nemo-parakeet-tdt-0.6b-v2"
+REPO = "istupakov/parakeet-tdt-0.6b-v2-onnx"  # Where onnx-asr downloads MODEL from.
 RATE = 16000
 VAD_OVER_S = 20
 
@@ -32,11 +34,18 @@ def write_wav(path: Path, audio: np.ndarray) -> None:
         w.writeframes((np.clip(audio, -1, 1) * 32767).astype(np.int16).tobytes())
 
 
-def load_speech() -> tuple:
-    """Loads Parakeet and warms it up. Returns it plain and with VAD, for transcribe()."""
+def load_speech(on_download: Callable[[], None] = lambda: None) -> tuple:
+    """Loads Parakeet and warms it up. Returns it plain and with VAD, for transcribe().
+
+    Calls on_download() first if Parakeet has to be downloaded.
+    """
     # Imported here because these packages are Windows-only; see pyproject.toml.
     import onnx_asr
     import onnxruntime as ort
+    from huggingface_hub import try_to_load_from_cache  # Comes with onnx-asr[hub].
+
+    if not isinstance(try_to_load_from_cache(REPO, "encoder-model.onnx.data"), str):
+        on_download()
 
     ort.set_default_logger_severity(3)
     with contextlib.redirect_stdout(sys.stderr):  # preload_dlls() prints its problems
