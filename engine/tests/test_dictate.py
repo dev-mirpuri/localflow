@@ -1,6 +1,7 @@
 import logging
 import queue
 import threading
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ class Fakes:
         self.pasted: list[str] = []
         self.saved: list[tuple[str, str, str, str]] = []
         self.cleaned = cleaned
+        self.sent: list[dict] = []
 
     def key(self, key: tuple[str, int], down: bool, at: float, injected: bool = False) -> bool:
         self.now = at
@@ -71,9 +73,21 @@ class Fakes:
         self.calls.append("target app")
         return "notepad.exe"
 
-    def save(self, raw_text: str, clean_text: str, target_app: str, status: str) -> None:
+    def save(self, raw_text: str, clean_text: str, target_app: str, status: str) -> dict:
         self.calls.append("save")
         self.saved.append((raw_text, clean_text, target_app, status))
+        return {"id": len(self.saved), "clean_text": clean_text}
+
+    # The protocol
+    def send(self, message: dict) -> None:
+        self.sent.append(message)
+
+    def states(self) -> list[str]:
+        return [message["state"] for message in self.sent if message["type"] == "state"]
+
+    def command(self, name: str, at: float) -> None:
+        self.now = at
+        dictate.on_command(self.hotkey, self.lock, self.queued, name, at)
 
     def paste(self, text: str) -> None:
         self.calls.append("paste")
@@ -283,7 +297,7 @@ def test_logs_hold_the_release_to_text_timing_and_error_types_but_never_the_word
 def test_a_failed_save_still_pastes_the_text_and_the_next_press_still_records():
     fakes = Fakes()
 
-    def failing_save(raw_text: str, clean_text: str, target_app: str, status: str) -> None:
+    def failing_save(raw_text: str, clean_text: str, target_app: str, status: str) -> dict:
         raise OSError("disk full")
 
     fakes.save = failing_save
@@ -292,3 +306,149 @@ def test_a_failed_save_still_pastes_the_text_and_the_next_press_still_records():
     fakes.step()
     assert fakes.pasted == ["Hello there. "]
     assert_next_press_records(fakes)
+
+
+def test_push_to_talk_sends_listening_processing_the_result_then_idle():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.step()
+    fakes.key(CTRL, False, 11)
+    fakes.step()
+    assert fakes.sent == [
+        {"type": "state", "state": "listening"},
+        {"type": "state", "state": "processing"},
+        {"type": "result", "entry": {"id": 1, "clean_text": "Hello there."}},
+        {"type": "state", "state": "idle"},
+    ]
+
+
+def test_tap_wait_is_listening_and_a_double_tap_sends_handsfree():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 10.05)
+    fakes.step()
+    assert fakes.states() == ["listening"]
+    fakes.key(CTRL, True, 10.15)
+    fakes.step()
+    assert fakes.states() == ["listening", "handsfree"]
+
+
+def test_the_finish_command_acts_like_the_tick_button_in_hands_free():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 10.05)
+    fakes.key(CTRL, True, 10.15)
+    fakes.key(CTRL, False, 10.2)
+    fakes.command("finish", 12)
+    fakes.step()
+    assert fakes.pasted == ["Hello there. "]
+    assert fakes.states()[-2:] == ["processing", "idle"]
+
+
+def test_the_cancel_command_acts_like_the_cross_button_in_hands_free():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 10.05)
+    fakes.key(CTRL, True, 10.15)
+    fakes.key(CTRL, False, 10.2)
+    fakes.command("cancel", 12)
+    fakes.step()
+    assert fakes.calls == ["mic start", "mic stop"]
+    assert fakes.states() == ["listening", "handsfree", "idle"]
+
+
+def test_a_discarded_tap_sends_idle():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 10.05)
+    fakes.step(at=10.5)
+    assert fakes.states() == ["listening", "idle"]
+
+
+def test_a_failed_transcription_sends_an_error_then_idle():
+    fakes = Fakes()
+
+    def failing_transcribe(audio: np.ndarray) -> str:
+        raise RuntimeError("CUDA out of memory")
+
+    fakes.transcribe = failing_transcribe
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 11)
+    fakes.step()
+    assert [message["type"] for message in fakes.sent] == ["state", "state", "error", "state"]
+    assert fakes.states()[-1] == "idle"
+
+
+def test_states_bracket_the_mic_so_no_level_arrives_outside_listening():
+    fakes = Fakes()
+    mic_open_when_sent = []
+
+    def send(message: dict) -> None:
+        if message["type"] == "state":
+            is_open = fakes.calls.count("mic start") > fakes.calls.count("mic stop")
+            mic_open_when_sent.append((message["state"], is_open))
+
+    fakes.send = send
+    fakes.key(CTRL, True, 10)
+    fakes.step()
+    fakes.key(CTRL, False, 11)
+    fakes.step()
+    fakes.key(CTRL, True, 12)
+    fakes.key(A, True, 12.5)
+    fakes.step()
+    assert mic_open_when_sent == [
+        ("listening", False),
+        ("processing", False),
+        ("idle", False),
+        ("listening", False),
+        ("idle", False),
+    ]
+
+
+def test_an_unknown_command_is_refused_rather_than_cancelling():
+    fakes = Fakes()
+    fakes.key(CTRL, True, 10)
+    fakes.key(CTRL, False, 10.05)
+    fakes.key(CTRL, True, 10.15)
+    with pytest.raises(ValueError):
+        fakes.command("stop", 12)
+    fakes.step()
+    assert fakes.states() == ["listening", "handsfree"]
+
+
+class Startup:
+    """The models' loading, as run_dictate tracks it, and the keys held back meanwhile."""
+
+    def __init__(self, state: str) -> None:
+        self.startup = SimpleNamespace(state=state, held=False, shown=False)
+        self.sent: list[dict] = []
+
+    def key(self, key: tuple[str, int], down: bool, injected: bool = False) -> bool:
+        name, _scan_code = key
+        return dictate.held_back(self.startup, "right ctrl", name, down, injected, self.sent.append)
+
+
+def test_a_press_while_loading_sends_loading_once_and_records_nothing():
+    startup = Startup("loading")
+    assert startup.key(CTRL, True) is True
+    assert startup.key(CTRL, True) is True  # auto-repeat
+    assert startup.key(CTRL, False) is True
+    assert startup.sent == [{"type": "state", "state": "loading"}]
+    assert startup.startup.shown
+
+
+def test_a_press_while_downloading_records_nothing_and_sends_nothing():
+    startup = Startup("downloading")
+    assert startup.key(CTRL, True) is True
+    assert startup.key(CTRL, False) is True
+    assert startup.sent == []
+
+
+def test_a_hotkey_held_through_warm_up_is_held_back_until_released():
+    startup = Startup("loading")
+    startup.key(CTRL, True)
+    startup.startup.state = "ready"
+    assert startup.key(CTRL, True) is True  # auto-repeat must not start a Recording
+    assert startup.key(CTRL, False) is True
+    assert startup.key(CTRL, True) is False
+    assert startup.key(A, True) is False

@@ -7,6 +7,7 @@ from pathlib import Path
 
 def open_history(path: Path) -> sqlite3.Connection:
     db = sqlite3.connect(path)
+    db.row_factory = sqlite3.Row
     db.execute(
         "CREATE TABLE IF NOT EXISTS entries (id INTEGER PRIMARY KEY, created_at TEXT NOT NULL,"
         " raw_text TEXT NOT NULL, clean_text TEXT NOT NULL, target_app TEXT NOT NULL,"
@@ -17,8 +18,8 @@ def open_history(path: Path) -> sqlite3.Connection:
 
 def save(
     db: sqlite3.Connection, raw_text: str, clean_text: str, target_app: str, status: str
-) -> int:
-    """Saves an Entry, committed before returning, and returns its id."""
+) -> dict:
+    """Saves an Entry, committed before returning, and returns it."""
     created_at = datetime.now().astimezone().isoformat(timespec="seconds")
     with db:
         cursor = db.execute(
@@ -26,4 +27,19 @@ def save(
             " VALUES (?, ?, ?, ?, ?)",
             (created_at, raw_text, clean_text, target_app, status),
         )
-    return cursor.lastrowid  # pyright: ignore[reportReturnType]
+    return dict(db.execute("SELECT * FROM entries WHERE id = ?", (cursor.lastrowid,)).fetchone())
+
+
+def entries(db: sqlite3.Connection, query: str, limit: int) -> list[dict]:
+    """The newest Entries first, up to limit, whose clean_text contains query in any case."""
+    rows = db.execute(
+        "SELECT * FROM entries WHERE instr(lower(clean_text), lower(?)) > 0"
+        " ORDER BY id DESC LIMIT ?",
+        (query, limit),
+    )
+    return [dict(row) for row in rows]
+
+
+def delete(db: sqlite3.Connection, entry_id: int) -> None:
+    with db:
+        db.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
