@@ -29,4 +29,5 @@ uv run python -c "import os, sqlite3; [print(r) for r in sqlite3.connect(os.path
 - [ ] Stop Ollama (`ollama stop qwen3:1.7b` and quit the Ollama app), then dictate a long sentence: the raw text is pasted and its row has `raw_fallback`.
 - [ ] Dictate into an app running as administrator: nothing is pasted, but the row is in `history.db`.
 - [ ] A quick tap, a held key with nothing said, and a Recording of only "um": nothing is pasted and no row is added.
+- [ ] A sentence spoken quietly, leaning back from the mic, still pastes and is saved.
 - [ ] `engine.log` has a `release-to-text` line per Dictation and never any of the words you said.
