@@ -42,7 +42,7 @@ def load_speech(on_download: Callable[[], None] = lambda: None) -> tuple:
     # Imported here because these packages are Windows-only; see pyproject.toml.
     import onnx_asr
     import onnxruntime as ort
-    from huggingface_hub import try_to_load_from_cache  # Comes with onnx-asr[hub].
+    from huggingface_hub import try_to_load_from_cache
 
     if not isinstance(try_to_load_from_cache(REPO, "encoder-model.onnx.data"), str):
         on_download()
