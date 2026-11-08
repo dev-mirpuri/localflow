@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, ipcMain, Menu, screen, Tray } from 'electron'
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
@@ -19,23 +19,22 @@ let tray: Tray // Held here so it isn't garbage-collected.
 let quitting = false
 let errorTimer: NodeJS.Timeout | undefined
 let nextId = 1
-const replies = new Map<
-  number,
-  { resolve: (data: unknown) => void; reject: (error: Error) => void }
->()
+const replies = new Map<number, (data: unknown) => void>()
 
 function startEngine(): void {
   const dataDir = join(app.getPath('appData'), app.isPackaged ? 'LocalFlow' : 'LocalFlow Dev')
-  const [command, args] = app.isPackaged
-    ? [join(process.resourcesPath, 'engine', 'localflow-engine.exe'), []]
-    : ['uv', ['run', '--project', join(app.getAppPath(), '..', 'engine'), 'localflow-engine']]
-  const child = spawn(command, [...args, 'dictate', '--data-dir', dataDir], {
-    stdio: ['pipe', 'pipe', 'inherit'],
-    windowsHide: true
-  })
+  const project = join(app.getAppPath(), '..', 'engine') // T10 swaps in the bundled exe.
+  const child = spawn(
+    'uv',
+    ['run', '--project', project, 'localflow-engine', 'dictate', '--data-dir', dataDir],
+    {
+      stdio: ['pipe', 'pipe', 'inherit'],
+      windowsHide: true
+    }
+  )
   child.on('error', engineStopped) // For example, uv isn't installed.
   child.on('close', engineStopped) // After stdout ends, so no last line arrives after it.
-  child.stdin.on('error', () => {}) // A write after a crash; 'exit' reports the crash.
+  child.stdin.on('error', () => {}) // A write after a crash; 'close' reports the crash.
   createInterface({ input: child.stdout }).on('line', onEngineLine)
   engine = child
 }
@@ -43,8 +42,6 @@ function startEngine(): void {
 function engineStopped(): void {
   if (!engine) return
   engine = null
-  replies.forEach(({ reject }) => reject(new Error('the engine stopped')))
-  replies.clear()
   if (quitting) app.quit()
   else onEngineMessage({ type: 'error', message: CRASHED }) // No automatic restart.
 }
@@ -62,7 +59,7 @@ function onEngineLine(line: string): void {
     return
   }
   if (message.type === 'reply') {
-    replies.get(message.id as number)?.resolve(message.data)
+    replies.get(message.id as number)?.(message.data)
     replies.delete(message.id as number)
   } else {
     onEngineMessage(message)
@@ -80,9 +77,8 @@ function onEngineMessage(message: EngineMessage): void {
       errorTimer = undefined
       showOval(false)
     }, ERROR_SHOWN_MS)
-  } else if (message.type === 'state' && !(message.state === 'idle' && errorTimer)) {
-    clearTimeout(errorTimer) // An idle right after an error leaves the error showing.
-    errorTimer = undefined
+  } else if (message.type === 'state') {
+    clearTimeout(errorTimer)
     showOval(message.state !== 'idle')
   }
 }
@@ -159,25 +155,28 @@ if (!app.requestSingleInstanceLock()) {
     if (!engine) return
     event.preventDefault()
     engine.stdin.end()
-    setTimeout(() => engine?.kill(), QUIT_WAIT_MS).unref() // A stuck Engine can't block Quit.
+    // A stuck Engine can't block Quit. Killing only uv would leave python holding the
+    // Hotkey hook and the VRAM, so the whole tree goes.
+    const pid = String(engine.pid)
+    setTimeout(
+      () => execFile('taskkill', ['/pid', pid, '/T', '/F'], () => {}),
+      QUIT_WAIT_MS
+    ).unref()
   })
 
   ipcMain.handle('request', (_event, method: string, params: unknown) => {
-    if (!engine) throw new Error('the engine stopped')
     const id = nextId++
     sendToEngine({ type: 'request', id, method, params })
-    return new Promise((resolve, reject) => replies.set(id, { resolve, reject }))
+    return new Promise((resolve) => replies.set(id, resolve))
   })
   ipcMain.on('command', (_event, name: string) => sendToEngine({ type: 'command', name }))
   ipcMain.on('copy', (_event, text: string) => clipboard.writeText(text))
 
   app.whenReady().then(() => {
-    app.setAppUserModelId('com.localflow.app')
     createOval()
     createHistory()
     history.once('ready-to-show', openHistory)
     tray = new Tray(icon)
-    tray.setToolTip('LocalFlow')
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open history', click: openHistory },
