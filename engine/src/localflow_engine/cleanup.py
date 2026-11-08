@@ -94,7 +94,7 @@ def call_model(text: str, timeout: float) -> str:
         keep_alive=-1,
         options={"temperature": 0, "seed": 0},
     )
-    return reply.message.content.strip()
+    return (reply.message.content or "").strip()
 
 
 def passes_rejection(output: str, sent: str) -> bool:
