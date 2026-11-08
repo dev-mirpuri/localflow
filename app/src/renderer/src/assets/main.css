@@ -1,1 +1,12 @@
 @import 'tailwindcss';
+
+/* The colours and font in DESIGN.md. */
+@theme static {
+  --color-primary: #7cb0ff;
+  --color-ground: #18181a;
+  --color-raised: #232326;
+  --color-line: #36363b;
+  --color-text: #ececee;
+  --color-dim: #a3a3ab;
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+}
