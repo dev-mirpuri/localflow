@@ -5,12 +5,11 @@ import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import icon from '../../resources/icon.png?asset'
 
-type Message = { type: string; [key: string]: unknown }
-
 const OVAL_WIDTH = 190 // The size and gap spike S3 proved (ADR-0003).
 const OVAL_HEIGHT = 44
 const OVAL_GAP = 12
 const ERROR_SHOWN_MS = 4000
+const QUIT_WAIT_MS = 15000 // Unloading the cleanup model can take up to 5 s.
 const CRASHED = "LocalFlow's engine stopped. Quit LocalFlow from the tray and start it again."
 
 let engine: ChildProcessByStdio<Writable, Readable, null> | null = null // null once it has exited
@@ -20,7 +19,10 @@ let tray: Tray // Held here so it isn't garbage-collected.
 let quitting = false
 let errorTimer: NodeJS.Timeout | undefined
 let nextId = 1
-const replies = new Map<number, (data: unknown) => void>()
+const replies = new Map<
+  number,
+  { resolve: (data: unknown) => void; reject: (error: Error) => void }
+>()
 
 function startEngine(): void {
   const dataDir = join(app.getPath('appData'), app.isPackaged ? 'LocalFlow' : 'LocalFlow Dev')
@@ -32,7 +34,7 @@ function startEngine(): void {
     windowsHide: true
   })
   child.on('error', engineStopped) // For example, uv isn't installed.
-  child.on('exit', engineStopped)
+  child.on('close', engineStopped) // After stdout ends, so no last line arrives after it.
   child.stdin.on('error', () => {}) // A write after a crash; 'exit' reports the crash.
   createInterface({ input: child.stdout }).on('line', onEngineLine)
   engine = child
@@ -41,16 +43,18 @@ function startEngine(): void {
 function engineStopped(): void {
   if (!engine) return
   engine = null
+  replies.forEach(({ reject }) => reject(new Error('the engine stopped')))
+  replies.clear()
   if (quitting) app.quit()
   else onEngineMessage({ type: 'error', message: CRASHED }) // No automatic restart.
 }
 
-function sendToEngine(message: Message): void {
+function sendToEngine(message: EngineMessage): void {
   engine?.stdin.write(JSON.stringify(message) + '\n')
 }
 
 function onEngineLine(line: string): void {
-  let message: Message
+  let message: EngineMessage
   try {
     message = JSON.parse(line)
   } catch {
@@ -58,14 +62,14 @@ function onEngineLine(line: string): void {
     return
   }
   if (message.type === 'reply') {
-    replies.get(message.id as number)?.(message.data)
+    replies.get(message.id as number)?.resolve(message.data)
     replies.delete(message.id as number)
   } else {
     onEngineMessage(message)
   }
 }
 
-function onEngineMessage(message: Message): void {
+function onEngineMessage(message: EngineMessage): void {
   for (const window of [history, oval]) {
     if (!window.isDestroyed()) window.webContents.send('event', message)
   }
@@ -137,6 +141,7 @@ function createOval(): void {
 }
 
 function openHistory(): void {
+  if (!history || history.isDestroyed()) return // A second launch before ready, or while quitting.
   if (history.isMinimized()) history.restore()
   history.show()
   history.focus()
@@ -154,12 +159,14 @@ if (!app.requestSingleInstanceLock()) {
     if (!engine) return
     event.preventDefault()
     engine.stdin.end()
+    setTimeout(() => engine?.kill(), QUIT_WAIT_MS).unref() // A stuck Engine can't block Quit.
   })
 
   ipcMain.handle('request', (_event, method: string, params: unknown) => {
+    if (!engine) throw new Error('the engine stopped')
     const id = nextId++
     sendToEngine({ type: 'request', id, method, params })
-    return new Promise((resolve) => replies.set(id, resolve))
+    return new Promise((resolve, reject) => replies.set(id, { resolve, reject }))
   })
   ipcMain.on('command', (_event, name: string) => sendToEngine({ type: 'command', name }))
   ipcMain.on('copy', (_event, text: string) => clipboard.writeText(text))
