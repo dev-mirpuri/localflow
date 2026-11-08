@@ -1,0 +1,99 @@
+/* The Oval in DESIGN.md. The page is transparent; only the pill is drawn. */
+body {
+  overflow: hidden;
+}
+
+.oval {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  max-width: 640px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--color-ground);
+  color: var(--color-text);
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.14),
+    0 1px 4px rgb(0 0 0 / 0.3);
+  user-select: none;
+}
+
+.oval-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+}
+
+/* Level bars: the same spans become the dots while processing, so the pill keeps its width. */
+.bars {
+  --bar-w: 2.5px;
+  --bar-gap: 3px;
+  --bar-min: 3px;
+  --bar-max: 16px;
+  --dot-size: 5px;
+  --dot-gap: 2.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(7 * (var(--bar-w) + var(--bar-gap)));
+  height: var(--bar-max);
+}
+.bars > span {
+  flex-shrink: 0;
+  width: var(--bar-w);
+  height: var(--bar-min);
+  margin-inline: calc(var(--bar-gap) / 2);
+  border-radius: 2px;
+  background: currentColor;
+  transition: height 90ms linear;
+}
+.bars[data-processing] > span {
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 999px;
+  transition:
+    height 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms ease-out;
+}
+.bars[data-processing] > span:not([data-dot]) {
+  width: 0;
+  margin-inline: 0;
+  opacity: 0;
+}
+.bars[data-processing] > span[data-dot] {
+  margin-inline: var(--dot-gap);
+  animation: dot-pulse 1100ms ease-in-out 260ms infinite;
+}
+.bars[data-processing] > span[data-dot] + span[data-dot] {
+  animation-delay: 420ms;
+}
+.bars[data-processing] > span[data-dot] + span[data-dot] + span[data-dot] {
+  animation-delay: 580ms;
+}
+@keyframes dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  45% {
+    opacity: 0.3;
+  }
+}
+
+/* Reduced motion: the bars hold still (OvalPage stops following the level) and the dots stop. */
+@media (prefers-reduced-motion: reduce) {
+  .bars > span,
+  .bars[data-processing] > span {
+    transition: none;
+  }
+  .bars[data-processing] > span[data-dot] {
+    animation: none;
+  }
+}

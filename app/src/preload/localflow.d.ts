@@ -8,6 +8,8 @@ declare global {
     request(method: string, params: Record<string, unknown>): Promise<unknown>
     command(name: 'finish' | 'cancel'): void
     copy(text: string): void
+    /** Shows the Oval window around a pill this wide, or hides it when null. */
+    showOval(pill: { width: number; clickable: boolean } | null): void
   }
 
   interface Window {

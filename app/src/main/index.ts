@@ -5,10 +5,9 @@ import { createInterface } from 'node:readline'
 import type { Readable, Writable } from 'node:stream'
 import icon from '../../resources/icon.png?asset'
 
-const OVAL_WIDTH = 190 // The size and gap spike S3 proved (ADR-0003).
-const OVAL_HEIGHT = 44
+const OVAL_HEIGHT = 44 // The height and gap spike S3 proved (ADR-0003).
 const OVAL_GAP = 12
-const ERROR_SHOWN_MS = 4000
+const OVAL_MARGIN = 6 // Room around the pill for its ring and shadow, as in the spike's 44 px.
 const QUIT_WAIT_MS = 15000 // Unloading the cleanup model can take up to 5 s.
 const CRASHED = "LocalFlow's engine stopped. Quit LocalFlow from the tray and start it again."
 
@@ -17,7 +16,6 @@ let history: BrowserWindow
 let oval: BrowserWindow
 let tray: Tray // Held here so it isn't garbage-collected.
 let quitting = false
-let errorTimer: NodeJS.Timeout | undefined
 let nextId = 1
 const replies = new Map<number, (data: unknown) => void>()
 
@@ -43,7 +41,10 @@ function engineStopped(): void {
   if (!engine) return
   engine = null
   if (quitting) app.quit()
-  else onEngineMessage({ type: 'error', message: CRASHED }) // No automatic restart.
+  else {
+    onEngineMessage({ type: 'error', message: CRASHED }) // No automatic restart.
+    onEngineMessage({ type: 'state', state: 'idle' }) // So no bars stay up from a dead Engine.
+  }
 }
 
 function sendToEngine(message: EngineMessage): void {
@@ -70,23 +71,28 @@ function onEngineMessage(message: EngineMessage): void {
   for (const window of [history, oval]) {
     if (!window.isDestroyed()) window.webContents.send('event', message)
   }
-  if (message.type === 'error') {
-    clearTimeout(errorTimer)
-    showOval(true)
-    errorTimer = setTimeout(() => {
-      errorTimer = undefined
-      showOval(false)
-    }, ERROR_SHOWN_MS)
-  } else if (message.type === 'state') {
-    clearTimeout(errorTimer)
-    showOval(message.state !== 'idle')
-  }
 }
 
-function showOval(shown: boolean): void {
+// The Oval page decides what shows; the window is held at the pill's size so no wider
+// empty area takes clicks, and takes clicks only while ✕ and ✓ are visible (ADR-0003).
+type Pill = { width: number; clickable: boolean } | null
+
+function showOval(pill: Pill): void {
   if (oval.isDestroyed()) return
-  if (shown) oval.showInactive()
-  else oval.hide()
+  if (!pill) {
+    oval.hide()
+    return
+  }
+  const { workArea } = screen.getPrimaryDisplay()
+  const width = Math.min(Math.ceil(pill.width) + 2 * OVAL_MARGIN, workArea.width)
+  oval.setBounds({
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
+    y: workArea.y + workArea.height - OVAL_HEIGHT - OVAL_GAP,
+    width,
+    height: OVAL_HEIGHT
+  })
+  oval.setIgnoreMouseEvents(!pill.clickable)
+  if (!oval.isVisible()) oval.showInactive()
 }
 
 function loadPage(window: BrowserWindow, page: string): void {
@@ -116,12 +122,8 @@ function createHistory(): void {
 }
 
 function createOval(): void {
-  const { workArea } = screen.getPrimaryDisplay()
   oval = new BrowserWindow({
-    width: OVAL_WIDTH,
-    height: OVAL_HEIGHT,
-    x: Math.round(workArea.x + (workArea.width - OVAL_WIDTH) / 2),
-    y: workArea.y + workArea.height - OVAL_HEIGHT - OVAL_GAP,
+    height: OVAL_HEIGHT, // showOval sets the width and position each time.
     frame: false,
     transparent: true,
     focusable: false,
@@ -132,7 +134,9 @@ function createOval(): void {
     webPreferences
   })
   oval.setAlwaysOnTop(true, 'screen-saver')
-  oval.setIgnoreMouseEvents(true) // The ✕ and ✓ buttons come in T7.
+  oval.setIgnoreMouseEvents(true)
+  // The Engine starts once the Oval page listens, so "Downloading speech model…" isn't missed.
+  oval.webContents.once('did-finish-load', startEngine)
   loadPage(oval, 'oval.html')
 }
 
@@ -151,7 +155,6 @@ if (!app.requestSingleInstanceLock()) {
   // Quit waits for the engine: closing its stdin makes it unload the cleanup model and exit.
   app.on('before-quit', (event) => {
     quitting = true
-    clearTimeout(errorTimer) // A timer firing on a destroyed window opens an error dialog (ADR-0003).
     if (!engine) return
     event.preventDefault()
     engine.stdin.end()
@@ -171,6 +174,7 @@ if (!app.requestSingleInstanceLock()) {
   })
   ipcMain.on('command', (_event, name: string) => sendToEngine({ type: 'command', name }))
   ipcMain.on('copy', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.on('show-oval', (_event, pill: Pill) => showOval(pill))
 
   app.whenReady().then(() => {
     createOval()
@@ -185,6 +189,5 @@ if (!app.requestSingleInstanceLock()) {
       ])
     )
     tray.on('click', openHistory)
-    startEngine()
   })
 }

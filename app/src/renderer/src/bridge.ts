@@ -35,7 +35,8 @@ function fakeBridge(): LocalFlow {
       return entries.filter((entry) => String(entry.clean_text).toLowerCase().includes(query))
     },
     command: (name) => console.log('fake bridge: command', name),
-    copy: (text) => navigator.clipboard.writeText(text)
+    copy: (text) => navigator.clipboard.writeText(text),
+    showOval: () => {}
   }
 }
 

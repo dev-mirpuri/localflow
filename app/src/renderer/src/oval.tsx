@@ -1,4 +1,5 @@
 import './assets/main.css'
+import './assets/oval.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
