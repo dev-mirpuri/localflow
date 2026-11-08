@@ -1,22 +1,15 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
 
-// Custom APIs for renderer
-const api = {}
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
+// The pages' only way out: no Node and no raw ipcRenderer.
+const localflow: LocalFlow = {
+  onEvent(callback) {
+    const listener = (_event: unknown, message: EngineMessage): void => callback(message)
+    ipcRenderer.on('event', listener)
+    return () => ipcRenderer.off('event', listener)
+  },
+  request: (method, params) => ipcRenderer.invoke('request', method, params),
+  command: (name) => ipcRenderer.send('command', name),
+  copy: (text) => ipcRenderer.send('copy', text)
 }
+
+contextBridge.exposeInMainWorld('localflow', localflow)

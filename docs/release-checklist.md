@@ -31,3 +31,15 @@ uv run python -c "import os, sqlite3; [print(r) for r in sqlite3.connect(os.path
 - [ ] A quick tap, a held key with nothing said, and a Recording of only "um": nothing is pasted and no row is added.
 - [ ] A sentence spoken quietly, leaning back from the mic, still pastes and is saved.
 - [ ] `engine.log` has a `release-to-text` line per Dictation and never any of the words you said.
+
+## App shell (T6)
+
+Quit any installed copy, then run `npm run dev` from `app/`. Ollama should be running.
+
+- [ ] The tray has a LocalFlow icon with Open history and Quit, and the History window opens on launch.
+- [ ] Closing the History window hides it; the tray icon stays, and Open history brings it back.
+- [ ] Dictation works with no console window, and the Oval appears while dictating and hides when done.
+- [ ] Press the Hotkey right after launch: the Oval shows the `loading` state until the models are ready.
+- [ ] Run `npx electron .` from `app/` while the App runs: the History window comes forward and no second tray icon appears.
+- [ ] End the Engine's `python.exe` in Task Manager: the Oval shows that the engine stopped, no error dialog appears, and the Engine doesn't restart.
+- [ ] After a dictation, Quit from the tray: `ollama ps` no longer lists the cleanup model, and Task Manager shows no `python.exe`, `uv.exe` or `localflow-engine.exe` left.
