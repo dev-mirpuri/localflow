@@ -17,7 +17,7 @@ body {
   white-space: nowrap;
   box-shadow:
     0 0 0 1px rgb(255 255 255 / 0.14),
-    0 4px 14px rgb(0 0 0 / 0.3);
+    0 1px 4px rgb(0 0 0 / 0.3);
   user-select: none;
 }
 

@@ -58,7 +58,7 @@ Run `npm run dev` from `app/` with Ollama running, and Notepad maximized on the 
 - [ ] Click-through while listening and processing: clicks on the Oval reach Notepad. Only ✕ and ✓ in hands-free take clicks.
 - [ ] No error dialog appears at any point, including when quitting while the Oval shows.
 
-First run, which also gives the long-lived message for S3's test. Rename `%USERPROFILE%\.cache\huggingface\hub\models--istupakov--parakeet-tdt-0.6b-v2-onnx`, then start the App. Put the folder back after, or rename it again to rerun.
+First run, which also gives the long-lived message for S3's test. Rename `%USERPROFILE%\.cache\huggingface\hub\models--istupakov--parakeet-tdt-0.6b-v2-onnx`, then start the App: it downloads about 2.5 GB again. Afterwards, delete the new folder and rename the old one back, or keep the new one and delete the old; rename it again to rerun.
 
 - [ ] "Downloading speech model…" shows in plain text for the whole download, presses during it record nothing, and dictation works once it finishes.
 - [ ] **S3's Notepad test with a message showing** (ADR-0003): while "Downloading speech model…" shows, click into Notepad once, then type a letter and press the Hotkey, 20 times. Each letter lands in Notepad, all 20 times, and the Oval never takes focus.

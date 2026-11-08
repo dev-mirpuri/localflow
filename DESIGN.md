@@ -152,7 +152,7 @@ The History window is one column: the search box pinned at the top, then the scr
 Flat by default. Depth comes from tone: Raised Graphite on Graphite Ground, with no shadows in the History window beyond the one Windows draws. Only the Oval casts a shadow, because it floats over other apps.
 
 ### Shadow Vocabulary
-- **Oval float** (`box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 4px 14px rgb(0 0 0 / 0.3)`): a thin ring that holds its edge on dark apps, and a soft shadow that lifts it off light ones.
+- **Oval float** (`box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 1px 4px rgb(0 0 0 / 0.3)`): a thin ring that holds its edge on dark apps, and a soft shadow that lifts it off light ones. The shadow stays inside the 6px margin of the Oval window (ADR-0003), so it never meets the window edge.
 
 ## Shapes
 
