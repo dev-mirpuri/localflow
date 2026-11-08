@@ -177,6 +177,7 @@ if (!app.requestSingleInstanceLock()) {
     createHistory()
     history.once('ready-to-show', openHistory)
     tray = new Tray(icon)
+    tray.setToolTip('LocalFlow')
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open history', click: openHistory },
