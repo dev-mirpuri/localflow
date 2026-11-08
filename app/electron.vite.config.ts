@@ -12,6 +12,14 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
+    build: {
+      rollupOptions: {
+        input: {
+          history: resolve('src/renderer/history.html'),
+          oval: resolve('src/renderer/oval.html')
+        }
+      }
+    },
     plugins: [react(), tailwindcss()]
   }
 })

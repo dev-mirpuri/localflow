@@ -1,71 +1,183 @@
-import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, screen, Tray } from 'electron'
+import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { join } from 'node:path'
+import { createInterface } from 'node:readline'
+import type { Readable, Writable } from 'node:stream'
 import icon from '../../resources/icon.png?asset'
 
-function createWindow(): void {
-  // Create the browser window.
-  const mainWindow = new BrowserWindow({
+type Message = { type: string; [key: string]: unknown }
+
+const OVAL_WIDTH = 190 // The size and gap spike S3 proved (ADR-0003).
+const OVAL_HEIGHT = 44
+const OVAL_GAP = 12
+const ERROR_SHOWN_MS = 4000
+const CRASHED = "LocalFlow's engine stopped. Quit LocalFlow from the tray and start it again."
+
+let engine: ChildProcessByStdio<Writable, Readable, null> | null = null // null once it has exited
+let history: BrowserWindow
+let oval: BrowserWindow
+let tray: Tray // Held here so it isn't garbage-collected.
+let quitting = false
+let errorTimer: NodeJS.Timeout | undefined
+let nextId = 1
+const replies = new Map<number, (data: unknown) => void>()
+
+function startEngine(): void {
+  const dataDir = join(app.getPath('appData'), app.isPackaged ? 'LocalFlow' : 'LocalFlow Dev')
+  const [command, args] = app.isPackaged
+    ? [join(process.resourcesPath, 'engine', 'localflow-engine.exe'), []]
+    : ['uv', ['run', '--project', join(app.getAppPath(), '..', 'engine'), 'localflow-engine']]
+  const child = spawn(command, [...args, 'dictate', '--data-dir', dataDir], {
+    stdio: ['pipe', 'pipe', 'inherit'],
+    windowsHide: true
+  })
+  child.on('error', engineStopped) // For example, uv isn't installed.
+  child.on('exit', engineStopped)
+  child.stdin.on('error', () => {}) // A write after a crash; 'exit' reports the crash.
+  createInterface({ input: child.stdout }).on('line', onEngineLine)
+  engine = child
+}
+
+function engineStopped(): void {
+  if (!engine) return
+  engine = null
+  if (quitting) app.quit()
+  else onEngineMessage({ type: 'error', message: CRASHED }) // No automatic restart.
+}
+
+function sendToEngine(message: Message): void {
+  engine?.stdin.write(JSON.stringify(message) + '\n')
+}
+
+function onEngineLine(line: string): void {
+  let message: Message
+  try {
+    message = JSON.parse(line)
+  } catch {
+    console.error('the engine sent a line that is not JSON')
+    return
+  }
+  if (message.type === 'reply') {
+    replies.get(message.id as number)?.(message.data)
+    replies.delete(message.id as number)
+  } else {
+    onEngineMessage(message)
+  }
+}
+
+function onEngineMessage(message: Message): void {
+  for (const window of [history, oval]) {
+    if (!window.isDestroyed()) window.webContents.send('event', message)
+  }
+  if (message.type === 'error') {
+    clearTimeout(errorTimer)
+    showOval(true)
+    errorTimer = setTimeout(() => {
+      errorTimer = undefined
+      showOval(false)
+    }, ERROR_SHOWN_MS)
+  } else if (message.type === 'state' && !(message.state === 'idle' && errorTimer)) {
+    clearTimeout(errorTimer) // An idle right after an error leaves the error showing.
+    errorTimer = undefined
+    showOval(message.state !== 'idle')
+  }
+}
+
+function showOval(shown: boolean): void {
+  if (oval.isDestroyed()) return
+  if (shown) oval.showInactive()
+  else oval.hide()
+}
+
+function loadPage(window: BrowserWindow, page: string): void {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/${page}`)
+  } else {
+    window.loadFile(join(__dirname, '../renderer', page))
+  }
+}
+
+const webPreferences = { preload: join(__dirname, '../preload/index.js') }
+
+function createHistory(): void {
+  history = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
+    webPreferences
   })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  history.on('close', (event) => {
+    if (quitting) return
+    event.preventDefault()
+    history.hide()
   })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadPage(history, 'history.html')
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+function createOval(): void {
+  const { workArea } = screen.getPrimaryDisplay()
+  oval = new BrowserWindow({
+    width: OVAL_WIDTH,
+    height: OVAL_HEIGHT,
+    x: Math.round(workArea.x + (workArea.width - OVAL_WIDTH) / 2),
+    y: workArea.y + workArea.height - OVAL_HEIGHT - OVAL_GAP,
+    frame: false,
+    transparent: true,
+    focusable: false,
+    resizable: false,
+    hasShadow: false,
+    skipTaskbar: true,
+    show: false,
+    webPreferences
+  })
+  oval.setAlwaysOnTop(true, 'screen-saver')
+  oval.setIgnoreMouseEvents(true) // The ✕ and ✓ buttons come in T7.
+  loadPage(oval, 'oval.html')
+}
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+function openHistory(): void {
+  if (history.isMinimized()) history.restore()
+  history.show()
+  history.focus()
+}
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', openHistory)
+
+  // Quit waits for the engine: closing its stdin makes it unload the cleanup model and exit.
+  app.on('before-quit', (event) => {
+    quitting = true
+    clearTimeout(errorTimer) // A timer firing on a destroyed window opens an error dialog (ADR-0003).
+    if (!engine) return
+    event.preventDefault()
+    engine.stdin.end()
   })
 
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  ipcMain.handle('request', (_event, method: string, params: unknown) => {
+    const id = nextId++
+    sendToEngine({ type: 'request', id, method, params })
+    return new Promise((resolve) => replies.set(id, resolve))
   })
-})
+  ipcMain.on('command', (_event, name: string) => sendToEngine({ type: 'command', name }))
+  ipcMain.on('copy', (_event, text: string) => clipboard.writeText(text))
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+  app.whenReady().then(() => {
+    app.setAppUserModelId('com.localflow.app')
+    createOval()
+    createHistory()
+    history.once('ready-to-show', openHistory)
+    tray = new Tray(icon)
+    tray.setToolTip('LocalFlow')
+    tray.setContextMenu(
+      Menu.buildFromTemplate([
+        { label: 'Open history', click: openHistory },
+        { label: 'Quit', click: () => app.quit() }
+      ])
+    )
+    tray.on('click', openHistory)
+    startEngine()
+  })
+}
