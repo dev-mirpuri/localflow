@@ -17,6 +17,7 @@ let oval: BrowserWindow
 let tray: Tray // Held here so it isn't garbage-collected.
 let quitting = false
 let nextId = 1
+let config: EngineMessage | null = null // Sent once at startup; a History page loaded later needs it.
 const replies = new Map<number, (data: unknown) => void>()
 
 function startEngine(): void {
@@ -68,6 +69,7 @@ function onEngineLine(line: string): void {
 }
 
 function onEngineMessage(message: EngineMessage): void {
+  if (message.type === 'config') config = message
   for (const window of [history, oval]) {
     if (!window.isDestroyed()) window.webContents.send('event', message)
   }
@@ -112,6 +114,9 @@ function createHistory(): void {
     show: false,
     autoHideMenuBar: true,
     webPreferences
+  })
+  history.webContents.on('did-finish-load', () => {
+    if (config) history.webContents.send('event', config)
   })
   history.on('close', (event) => {
     if (quitting) return
@@ -173,7 +178,7 @@ if (!app.requestSingleInstanceLock()) {
     return new Promise((resolve) => replies.set(id, resolve))
   })
   ipcMain.on('command', (_event, name: string) => sendToEngine({ type: 'command', name }))
-  ipcMain.on('copy', (_event, text: string) => clipboard.writeText(text))
+  ipcMain.handle('copy', (_event, text: string) => clipboard.writeText(text))
   ipcMain.on('show-oval', (_event, pill: Pill) => showOval(pill))
 
   app.whenReady().then(() => {

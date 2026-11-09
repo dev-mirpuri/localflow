@@ -63,3 +63,19 @@ First run, which also gives the long-lived message for S3's test. Rename `%USERP
 - [ ] "Downloading speech model…" shows in plain text for the whole download, presses during it record nothing, and dictation works once it finishes.
 - [ ] **S3's Notepad test with a message showing** (ADR-0003): while "Downloading speech model…" shows, click into Notepad once, then type a letter and press the Hotkey, 20 times. Each letter lands in Notepad, all 20 times, and the Oval never takes focus.
 - [ ] **Click-through with a message showing:** while it shows, click on and around the Oval for about 15 s. Every click reaches Notepad (the caret moves), and nothing happens on the Oval.
+
+## History list (T8a)
+
+Run `npm run dev` from `app/` with Ollama running and a few Entries in `%APPDATA%\LocalFlow Dev\history.db`, including one from yesterday or earlier and one `raw_fallback` (see T4b).
+
+- [ ] `npm run lint` and `npm run typecheck` pass in `app/`.
+- [ ] The History window lists the Entries newest first under Today, Yesterday and dated labels, and each day label sticks to the top while its group scrolls.
+- [ ] Each Entry shows its Cleaned text clamped to two lines, the time, the Target app, and Copy. Delete appears only on row hover or when Tab reaches the row, and nothing in the row shifts when it does.
+- [ ] A long Entry has Show all; a short one doesn't. Clicking the text or Show all expands it; Show less clamps it again. Drag-selecting part of the text selects it and doesn't expand or clamp.
+- [ ] Copy shows "Copied" in blue for about 1.4 s. Paste into Notepad: the text matches the Entry, with no trailing space.
+- [ ] Delete removes the row at once with a quick collapse and no confirmation. Click Delete twice quickly without moving the mouse: only one Entry goes. Restart the App: the deleted Entry stays gone.
+- [ ] Hover the "uncleaned" tag: its tooltip reads "Cleanup didn't finish, so this is the raw transcript."
+- [ ] With the History window open, dictate a sentence into Notepad: its Entry appears at the top under Today without reopening the window.
+- [ ] Narrow the window to its smallest: the time, Target app and tag wrap, and Copy and Delete stay in view.
+- [ ] With Narrator on, Tab to Copy and Delete: each is read with the start of its Entry, like "Copy: Sounds good, see you at 4pm."
+- [ ] Rename `history.db` while the App is closed, then start it: the window shows one line, "Hold Right Ctrl and speak", with the key in a key cap. Rename it back afterwards.

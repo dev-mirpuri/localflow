@@ -9,7 +9,7 @@ const localflow: LocalFlow = {
   },
   request: (method, params) => ipcRenderer.invoke('request', method, params),
   command: (name) => ipcRenderer.send('command', name),
-  copy: (text) => ipcRenderer.send('copy', text),
+  copy: (text) => ipcRenderer.invoke('copy', text),
   showOval: (pill) => ipcRenderer.send('show-oval', pill)
 }
 
