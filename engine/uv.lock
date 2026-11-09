@@ -292,6 +292,7 @@ name = "localflow-engine"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "huggingface-hub", marker = "sys_platform == 'win32'" },
     { name = "keyboard", marker = "sys_platform == 'win32'" },
     { name = "numpy" },
     { name = "nvidia-cublas", marker = "sys_platform == 'win32'" },
@@ -311,6 +312,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", marker = "sys_platform == 'win32'", specifier = "==2.4.0" },
     { name = "keyboard", marker = "sys_platform == 'win32'", specifier = "==0.13.5" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "nvidia-cublas", marker = "sys_platform == 'win32'", specifier = "==13.8.0.4" },

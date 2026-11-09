@@ -126,7 +126,7 @@ Choices marked **(spike)** are provisional until their spike in section 7 record
 
 - **Main process:** creates the tray, the history window and the oval window; starts the engine (`uv run` in development, the bundled exe when installed); forwards engine messages to the windows and requests back. If the engine crashes, shows an error on the oval.
 - **Single instance:** Electron's single-instance lock; a second launch opens the history window. Opening by hand shows the history window; a launch at login stays in the tray.
-- **Preload:** exposes one small `window.localflow` object (`onEvent`, `request`, `command`, `copy`) through `contextBridge`. No Node access in the pages.
+- **Preload:** exposes one small `window.localflow` object (`onEvent`, `request`, `command`, `copy`, and `showOval`, which the oval page uses to have main show, size and hide its window) through `contextBridge`. No Node access in the pages.
 - **Oval window:** frameless, `transparent: true`, `focusable: false`, always on top at the `screen-saver` level, shown with `showInactive()`, click-through (`setIgnoreMouseEvents`) except while the ✕/✓ buttons are visible. Built exactly the way spike S3 proved ([ADR-0003](adr/0003-s3-oval-focus.md)).
 - **History window:** an ordinary window; closing hides it.
 - **Fake bridge:** when the pages run in a normal browser (no `window.localflow`), they use sample data and cycle the oval's states. This is how Playwright screenshots the UI. Keep it under ~60 lines, and list both pages' dev-server URLs in the README.

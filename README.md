@@ -39,3 +39,10 @@ Run the app commands from `app/`:
 | Format | `npm run format` |
 | Type check | `npm run typecheck` |
 | Build | `npm run build` |
+
+## The pages in a browser
+
+`npm run dev` starts the whole App: the tray icon, the Engine (through `uv run`, with its data in `%APPDATA%\LocalFlow Dev`) and both windows. To work on the pages alone, run `npx electron-vite dev --rendererOnly` from `app/`; in a normal browser the pages use the Fake bridge, which gives sample Entries and cycles the Oval's states:
+
+- History window: http://localhost:5173/history.html
+- Oval: http://localhost:5173/oval.html

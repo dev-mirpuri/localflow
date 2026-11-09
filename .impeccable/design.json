@@ -104,7 +104,7 @@
     "shadows": [
       {
         "name": "oval-float",
-        "value": "0 0 0 1px rgb(255 255 255 / 0.14), 0 4px 14px rgb(0 0 0 / 0.3)",
+        "value": "0 0 0 1px rgb(255 255 255 / 0.14), 0 1px 4px rgb(0 0 0 / 0.3)",
         "purpose": "The Oval over other apps."
       }
     ],
@@ -163,7 +163,7 @@
       "refersTo": "oval",
       "description": "Shown only while it has something to say; here with a message.",
       "html": "<div class=\"ds-oval\">Starting up…</div>",
-      "css": ".ds-oval { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 999px; background: #18181a; color: #ececee; font: 400 13px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 4px 14px rgb(0 0 0 / 0.3); }"
+      "css": ".ds-oval { display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 999px; background: #18181a; color: #ececee; font: 400 13px 'Segoe UI Variable Text', 'Segoe UI', sans-serif; box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 1px 4px rgb(0 0 0 / 0.3); }"
     }
   ],
   "narrative": {

@@ -15,11 +15,12 @@ def test_a_saved_entry_is_on_disk_with_every_column(tmp_path):
     path = tmp_path / "history.db"
     db = history.open_history(path)
 
-    entry_id = history.save(db, "um hello there", "Hello there.", "notepad.exe", "raw_fallback")
+    entry = history.save(db, "um hello there", "Hello there.", "notepad.exe", "raw_fallback")
 
     [row] = rows(path)
+    assert dict(row) == entry
     assert dict(row) | {"created_at": None} == {
-        "id": entry_id,
+        "id": entry["id"],
         "created_at": None,
         "raw_text": "um hello there",
         "clean_text": "Hello there.",
@@ -31,8 +32,8 @@ def test_a_saved_entry_is_on_disk_with_every_column(tmp_path):
 
 def test_reopening_keeps_earlier_entries_and_adds_after_them(tmp_path):
     path = tmp_path / "history.db"
-    first = history.save(history.open_history(path), "one", "One.", "a.exe", "ok")
-    second = history.save(history.open_history(path), "two", "Two.", "b.exe", "ok")
+    first = history.save(history.open_history(path), "one", "One.", "a.exe", "ok")["id"]
+    second = history.save(history.open_history(path), "two", "Two.", "b.exe", "ok")["id"]
 
     assert second > first
     assert [row["clean_text"] for row in rows(path)] == ["One.", "Two."]

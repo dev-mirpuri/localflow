@@ -31,3 +31,35 @@ uv run python -c "import os, sqlite3; [print(r) for r in sqlite3.connect(os.path
 - [ ] A quick tap, a held key with nothing said, and a Recording of only "um": nothing is pasted and no row is added.
 - [ ] A sentence spoken quietly, leaning back from the mic, still pastes and is saved.
 - [ ] `engine.log` has a `release-to-text` line per Dictation and never any of the words you said.
+
+## App shell (T6)
+
+Quit any installed copy, then run `npm run dev` from `app/`. Ollama should be running.
+
+- [ ] The tray has a LocalFlow icon with Open history and Quit, and the History window opens on launch.
+- [ ] Closing the History window hides it; the tray icon stays, and Open history brings it back.
+- [ ] Dictation works with no console window, and the Oval appears while dictating and hides when done.
+- [ ] Press the Hotkey right after launch: the Oval shows the `loading` state until the models are ready.
+- [ ] Run `npx electron .` from `app/` while the App runs: the History window comes forward and no second tray icon appears.
+- [ ] End the Engine's `python.exe` in Task Manager: the Oval shows that the engine stopped, no error dialog appears, and the Engine doesn't restart.
+- [ ] After a dictation, Quit from the tray: `ollama ps` no longer lists the cleanup model, and Task Manager shows no `python.exe`, `uv.exe` or `localflow-engine.exe` left.
+
+## The Oval (T7)
+
+Run `npm run dev` from `app/` with Ollama running, and Notepad maximized on the main screen. Today the Engine's only messages are "Starting up…", "Downloading speech model…", the transcription error and the engine-stopped error, so the message checks below use the download and the engine-stopped error.
+
+- [ ] `npm run lint` and `npm run typecheck` pass in `app/`.
+- [ ] Hold the Hotkey and speak: the Oval appears bottom centre, just above the taskbar, with 7 bars that follow your voice. Release: the same bars settle into 3 pulsing dots, then the Oval hides when the text lands.
+- [ ] Double-tap: ✕ and ✓ appear beside the bars. ✓ finishes and pastes; ✕ cancels and pastes nothing. Each works on the first click, and typing still lands in Notepad afterwards.
+- [ ] Double-tap, then end the Engine's `python.exe` in Task Manager: the engine-stopped error replaces the bars on one line in a wider Oval, stays about 4 s even though the Engine already went idle, then the Oval hides with no bars or buttons left. No error dialog appears.
+- [ ] Press the Hotkey right after launch: "Starting up…" shows in plain text, not as an error, until the models are ready.
+- [ ] Turn on Settings > Accessibility > Visual effects > Animation effects off: the bars hold still and the dots don't pulse. Turn it back on.
+- [ ] The Oval's motion looks as smooth as spike S3's: no flicker or stutter in the bars, morph or dots.
+- [ ] Click-through while listening and processing: clicks on the Oval reach Notepad. Only ✕ and ✓ in hands-free take clicks.
+- [ ] No error dialog appears at any point, including when quitting while the Oval shows.
+
+First run, which also gives the long-lived message for S3's test. Rename `%USERPROFILE%\.cache\huggingface\hub\models--istupakov--parakeet-tdt-0.6b-v2-onnx`, then start the App: it downloads about 2.5 GB again. Afterwards, delete the new folder and rename the old one back, or keep the new one and delete the old; rename it again to rerun.
+
+- [ ] "Downloading speech model…" shows in plain text for the whole download, presses during it record nothing, and dictation works once it finishes.
+- [ ] **S3's Notepad test with a message showing** (ADR-0003): while "Downloading speech model…" shows, click into Notepad once, then type a letter and press the Hotkey, 20 times. Each letter lands in Notepad, all 20 times, and the Oval never takes focus.
+- [ ] **Click-through with a message showing:** while it shows, click on and around the Oval for about 15 s. Every click reaches Notepad (the caret moves), and nothing happens on the Oval.
