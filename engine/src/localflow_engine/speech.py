@@ -2,6 +2,7 @@
 
 import contextlib
 import logging
+import subprocess
 import sys
 import time
 import wave
@@ -16,6 +17,26 @@ MODEL = "nemo-parakeet-tdt-0.6b-v2"
 REPO = "istupakov/parakeet-tdt-0.6b-v2-onnx"  # Where onnx-asr downloads MODEL from.
 RATE = 16000
 VAD_OVER_S = 20
+MIN_GPU_MB = 6000  # A 6 GB card reports 6144 MiB.
+UNSUPPORTED = (
+    "LocalFlow needs an NVIDIA GPU with 6 GB and a working driver. Update the driver and restart."  # noqa: E501
+)
+NO_GPU = "The GPU isn't available. Update the NVIDIA driver and restart LocalFlow."
+NO_SPEECH = "The speech model didn't load. Check your internet and restart LocalFlow."
+
+
+class GpuUnavailable(RuntimeError):
+    pass
+
+
+def gpu_mb() -> int:
+    """The memory of the largest NVIDIA GPU in MiB, or 0 without one."""
+    query = ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"]
+    try:
+        out = subprocess.run(query, capture_output=True, text=True, check=True, timeout=10).stdout
+        return max((int(line) for line in out.split()), default=0)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0
 
 
 def read_wav(path: Path) -> np.ndarray:
@@ -57,7 +78,7 @@ def load_speech(on_download: Callable[[], None] = lambda: None) -> tuple:
     # ORT falls back to the CPU silently, and onnx-asr has no public way to ask.
     used = parakeet.asr._encoder.get_providers()[0]  # pyright: ignore[reportAttributeAccessIssue]
     if used != "CUDAExecutionProvider":
-        raise RuntimeError(f"Parakeet is not on CUDA, it is on {used}")
+        raise GpuUnavailable(f"Parakeet is not on CUDA, it is on {used}")
     vad = onnx_asr.load_vad("silero", providers=["CPUExecutionProvider"])
     log.info("load %.2f s", time.perf_counter() - start)
 

@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from types import SimpleNamespace
 
-from localflow_engine import dictate, history, protocol
+from localflow_engine import config, dictate, history, protocol, speech
 from localflow_engine.cleanup import clean, unload_cleanup, warm_up_cleanup
 from localflow_engine.hotkey import Hotkey
 from localflow_engine.speech import load_speech, read_wav, transcribe, write_wav
@@ -57,9 +57,9 @@ def run_transcribe(path: Path) -> None:
     except (OSError, EOFError, wave.Error, ValueError) as error:
         sys.exit(f"Can't read {path}: {error}")
 
-    speech = load_speech()
+    models = load_speech()
     start = time.perf_counter()
-    transcript = transcribe(speech, audio)
+    transcript = transcribe(models, audio)
     log.info("transcribe %.2f s", time.perf_counter() - start)
     print(transcript)
 
@@ -70,8 +70,12 @@ def run_dictate(data_dir: Path) -> None:
     from localflow_engine import windows
 
     sys.stdout = sys.stderr  # Only protocol.send() writes to the real stdout.
-    hotkey, lock, queued = Hotkey(protocol.HOTKEY), threading.Lock(), queue.Queue()
-    startup = SimpleNamespace(state="loading", held=False, shown=False)
+    settings, errors = config.load(data_dir / "config.json")
+    for message in errors:
+        protocol.send({"type": "error", "message": message})
+    hotkey = Hotkey(config.hook_name(settings["hotkey"]))
+    lock, queued = threading.Lock(), queue.Queue()
+    startup = SimpleNamespace(state="loading", held=False, shown=False, error="")
 
     def on_key(name: str, scan_code: int, down: bool, injected: bool) -> bool:
         if dictate.held_back(startup, hotkey.name, name, down, injected, protocol.send):
@@ -81,18 +85,19 @@ def run_dictate(data_dir: Path) -> None:
 
     windows.hook(on_key)
     threading.Thread(
-        target=run_dictation, args=(data_dir, hotkey, lock, queued, startup), daemon=True
+        target=run_dictation, args=(data_dir, settings, hotkey, lock, queued, startup), daemon=True
     ).start()
     try:
         protocol.serve(
             sys.stdin,
             data_dir,
+            settings,
             lambda name: dictate.on_command(hotkey, lock, queued, name, time.monotonic()),
         )
     finally:
         windows.unhook()
         try:
-            unload_cleanup()
+            unload_cleanup(settings["cleanup_model"])
         except Exception as error:
             log.warning("unloading the cleanup model failed with %s", type(error).__name__)
     log.info("stdin closed, exiting")
@@ -101,32 +106,50 @@ def run_dictate(data_dir: Path) -> None:
     os._exit(0)
 
 
-def run_dictation(data_dir: Path, hotkey: Hotkey, lock, queued, startup) -> None:
+def run_dictation(data_dir: Path, settings: dict, hotkey: Hotkey, lock, queued, startup) -> None:
     """Loads the models, then runs Dictations for as long as the Engine runs."""
-    from localflow_engine import windows
-    from localflow_engine.mic import Mic
+    from localflow_engine import mic, windows
+
+    def send_error(message: str) -> None:
+        protocol.send({"type": "error", "message": message})
+
+    def failed(message: str) -> None:
+        startup.error, startup.state = message, "failed"
+        send_error(message)
+        protocol.send(dictate.state("idle"))  # Ends "Starting up…" or "Downloading…".
 
     def on_download() -> None:
         startup.state = "downloading"
         protocol.send(dictate.state("downloading"))
 
-    speech = load_speech(on_download)
+    device, mic_error = mic.pick(settings["microphone"])
+    if mic_error:
+        send_error(mic_error)
+    if speech.gpu_mb() < speech.MIN_GPU_MB:
+        log.error("no NVIDIA GPU with %d MiB", speech.MIN_GPU_MB)
+        return failed(speech.UNSUPPORTED)
+    try:
+        models = load_speech(on_download)
+    except Exception as error:
+        log.error("loading Parakeet failed with %s", type(error).__name__)
+        gpu = isinstance(error, speech.GpuUnavailable)
+        return failed(speech.NO_GPU if gpu else speech.NO_SPEECH)
     if startup.state == "downloading":
         startup.state = "loading"
         protocol.send(dictate.state("idle"))  # Ends "Downloading speech model…".
-    try:
-        warm_up_cleanup()
-    except Exception as error:  # Cleanup falls back to the Transcript on its own.
-        log.warning("cleanup warm-up failed with %s", type(error).__name__)
+    model = settings["cleanup_model"]
+    warm_up_cleanup(model, send_error)
 
     db = history.open_history(data_dir / "history.db")
-    mic = Mic(lambda value: protocol.send({"type": "level", "value": round(value, 2)}))
+    microphone = mic.Mic(
+        lambda value: protocol.send({"type": "level", "value": round(value, 2)}), device
+    )
     parts = SimpleNamespace(
-        start=mic.start,
-        stop=mic.stop,
-        transcribe=lambda audio: transcribe(speech, audio),
+        start=microphone.start,
+        stop=microphone.stop,
+        transcribe=lambda audio: transcribe(models, audio),
         save_failed=lambda audio: write_wav(data_dir / "last-failed.wav", audio),
-        clean=clean,
+        clean=lambda transcript: clean(transcript, model, send_error),
         target_app=windows.target_app,
         save=lambda raw_text, clean_text, target_app, status: history.save(
             db, raw_text, clean_text, target_app, status
@@ -137,6 +160,6 @@ def run_dictation(data_dir: Path, hotkey: Hotkey, lock, queued, startup) -> None
     startup.state = "ready"
     if startup.shown:
         protocol.send(dictate.state("idle"))  # Ends "Starting up…".
-    log.info("ready: hold or double-tap Right Ctrl; close stdin to quit")
+    log.info("ready: hold or double-tap %s; close stdin to quit", settings["hotkey"])
     while True:
         dictate.step(hotkey, lock, queued, parts, time.monotonic)

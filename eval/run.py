@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-from localflow_engine.cleanup import clean, prepass, warm_up_cleanup, words
+from localflow_engine.cleanup import MODEL, clean, prepass, warm_up_cleanup, words
 from localflow_engine.speech import load_speech, read_wav, transcribe
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +50,7 @@ def main() -> None:
     cases = cases[TUNING_CLIPS:] if args.holdout else cases[:TUNING_CLIPS]
 
     speech = load_speech()
-    warm_up_cleanup()
+    warm_up_cleanup(MODEL, sys.exit)
 
     scores, seconds, exact, normalized, fallbacks, flagged = [], [], [], [], [], []
     for case in cases:

@@ -9,6 +9,7 @@ const OVAL_HEIGHT = 44 // The height and gap spike S3 proved (ADR-0003).
 const OVAL_GAP = 12
 const OVAL_MARGIN = 6 // Room around the pill for its ring and shadow, as in the spike's 44 px.
 const QUIT_WAIT_MS = 15000 // Unloading the cleanup model can take up to 5 s.
+const AT_LOGIN = '--login' // Passed by the login item, so a launch at login stays in the tray.
 const CRASHED = "LocalFlow's engine stopped. Quit LocalFlow from the tray and start it again."
 
 let engine: ChildProcessByStdio<Writable, Readable, null> | null = null // null once it has exited
@@ -48,6 +49,13 @@ function engineStopped(): void {
   }
 }
 
+// From source there's no installed exe to register, so it only says what it would do (T10 tests it).
+function followLaunchAtLogin(openAtLogin: boolean): void {
+  const settings = { openAtLogin, args: [AT_LOGIN] }
+  if (app.isPackaged) app.setLoginItemSettings(settings)
+  else console.log('not packaged, so no login item; would set', JSON.stringify(settings))
+}
+
 function sendToEngine(message: EngineMessage): void {
   engine?.stdin.write(JSON.stringify(message) + '\n')
 }
@@ -69,7 +77,10 @@ function onEngineLine(line: string): void {
 }
 
 function onEngineMessage(message: EngineMessage): void {
-  if (message.type === 'config') config = message
+  if (message.type === 'config') {
+    config = message
+    followLaunchAtLogin(message.launch_at_login === true)
+  }
   for (const window of [history, oval]) {
     if (!window.isDestroyed()) window.webContents.send('event', message)
   }
@@ -191,7 +202,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     createOval()
     createHistory()
-    history.once('ready-to-show', openHistory)
+    if (!process.argv.includes(AT_LOGIN)) history.once('ready-to-show', openHistory)
     tray = new Tray(icon)
     tray.setToolTip('LocalFlow')
     tray.setContextMenu(

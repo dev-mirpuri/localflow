@@ -22,6 +22,8 @@ MIN_S = 0.3
 # Room noise in the eval clips is about -49 dBFS; their quietest speech peaks at -33.
 SILENT_DBFS = -42
 LOUDNESS_BLOCK = RATE // 20
+NO_MIC = "No microphone found. Plug one in, or fix its name in config.json."
+NOT_TRANSCRIBED = "Couldn't transcribe that, so it's kept in last-failed.wav. Try again."
 
 
 def worth_transcribing(audio: np.ndarray) -> bool:
@@ -41,8 +43,9 @@ def state(name: str) -> dict:
 def held_back(startup, hotkey_name: str, name: str, down: bool, injected: bool, send) -> bool:
     """Whether a key skips the Hotkey: while the models load, and until a press meanwhile is up.
 
-    startup has the loading state ("downloading", "loading" or "ready"), held, and shown,
-    which is set once "loading" is sent. A press while downloading sends nothing.
+    startup has the loading state ("downloading", "loading", "ready" or "failed"), held, and
+    shown, which is set once "loading" is sent. A press while downloading sends nothing, and
+    each press once failed sends startup.error.
     """
     if startup.state == "ready" and not startup.held:
         return False
@@ -50,6 +53,8 @@ def held_back(startup, hotkey_name: str, name: str, down: bool, injected: bool, 
         if down and not startup.held and startup.state == "loading":
             startup.shown = True
             send(state("loading"))
+        elif down and not startup.held and startup.state == "failed":
+            send({"type": "error", "message": startup.error})
         startup.held = down
     return True
 
@@ -109,7 +114,16 @@ def step(
         log.info(action)
         if action == "start":
             parts.send(state("listening"))
-            parts.start()
+            try:
+                parts.start()
+            except Exception as error:  # The rest of this batch belonged to that Recording.
+                log.error("the mic failed to open with %s", type(error).__name__)
+                parts.stop()
+                with lock:
+                    hotkey.done()
+                parts.send({"type": "error", "message": NO_MIC})
+                parts.send(state("idle"))
+                return
         elif action == "hands_free":
             parts.send(state("handsfree"))
         elif action in ("cancel", "discard"):
@@ -137,7 +151,7 @@ def finish(hotkey: Hotkey, parts) -> None:
     except Exception as error:
         log.error("transcription failed with %s", type(error).__name__)
         parts.save_failed(audio)
-        parts.send({"type": "error", "message": "Couldn't transcribe that. Try again."})
+        parts.send({"type": "error", "message": NOT_TRANSCRIBED})
         return
     text, status = parts.clean(transcript)
     text = text.rstrip()

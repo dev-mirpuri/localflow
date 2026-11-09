@@ -27,3 +27,4 @@ $RECYCLE.BIN/
 .claude/settings.local.json
 .impeccable/critique/
 .impeccable/questions/
+.playwright-mcp/

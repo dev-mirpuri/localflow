@@ -452,3 +452,35 @@ def test_a_hotkey_held_through_warm_up_is_held_back_until_released():
     assert startup.key(CTRL, False) is True
     assert startup.key(CTRL, True) is False
     assert startup.key(A, True) is False
+
+
+def test_every_press_after_speech_failed_to_load_shows_its_error_and_records_nothing():
+    startup = Startup("failed")
+    startup.startup.error = "The GPU isn't available."
+    for _ in range(2):
+        assert startup.key(CTRL, True) is True
+        assert startup.key(CTRL, True) is True  # auto-repeat
+        assert startup.key(CTRL, False) is True
+    error = {"type": "error", "message": "The GPU isn't available."}
+    assert startup.sent == [error, error]
+
+
+def test_a_mic_that_wont_open_shows_the_error_and_the_next_press_still_records():
+    fakes = Fakes()
+
+    def failing_start() -> None:
+        fakes.calls.append("mic start")
+        raise OSError("no default input device")
+
+    fakes.start = failing_start
+    fakes.key(CTRL, True, 10)
+    fakes.step()
+    fakes.key(CTRL, False, 11)
+    fakes.step()
+    assert fakes.sent == [
+        dictate.state("listening"),
+        {"type": "error", "message": dictate.NO_MIC},
+        dictate.state("idle"),
+    ]
+    del fakes.start
+    assert_next_press_records(fakes)

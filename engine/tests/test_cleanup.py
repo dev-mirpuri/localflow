@@ -7,7 +7,7 @@ import httpx
 import ollama
 import pytest
 
-from localflow_engine.cleanup import clean
+from localflow_engine.cleanup import OLLAMA_DOWN, clean, warm_up_cleanup
 
 
 class FakeModel:
@@ -214,6 +214,49 @@ def test_an_error_or_timeout_falls_back_to_the_transcript(
     transcript = "Um, so the raw words are kept."
 
     assert clean(transcript) == (transcript, "raw_fallback")
+
+
+MISSING = 'The cleanup model is missing. Run "ollama pull my-model:2b" and try again.'
+
+
+@pytest.mark.parametrize(
+    ("error", "reported"),
+    [
+        (ConnectionError("Failed to connect to Ollama"), [OLLAMA_DOWN]),
+        (ollama.ResponseError("model 'my-model:2b' not found", 404), [MISSING]),
+        (httpx.ReadTimeout("timed out"), []),
+        (ollama.ResponseError("server busy", 503), []),
+    ],
+)
+def test_a_fallback_because_ollama_is_down_or_the_model_missing_reports_the_fix(
+    model: FakeModel, error: Exception, reported: list[str]
+) -> None:
+    model.reply = raises(error)
+    errors: list[str] = []
+    transcript = "Um, so the raw words are kept."
+
+    assert clean(transcript, "my-model:2b", errors.append) == (transcript, "raw_fallback")
+    assert errors == reported
+    assert model.calls[0]["model"] == "my-model:2b"
+
+
+def test_the_problem_is_reported_once_however_many_chunks_fall_back(model: FakeModel) -> None:
+    model.reply = raises(ConnectionError("Failed to connect to Ollama"))
+    errors: list[str] = []
+
+    clean(" ".join(["This sentence has six words in it."] * 12), "qwen3:1.7b", errors.append)
+
+    assert len(model.calls) > 1
+    assert errors == [OLLAMA_DOWN]
+
+
+def test_warm_up_reports_ollama_down_instead_of_raising(model: FakeModel) -> None:
+    model.reply = raises(ConnectionError("Failed to connect to Ollama"))
+    errors: list[str] = []
+
+    warm_up_cleanup("qwen3:1.7b", errors.append)
+
+    assert errors == [OLLAMA_DOWN]
 
 
 def test_a_failure_logs_its_type_but_never_the_words(
