@@ -70,12 +70,28 @@ Run `npm run dev` from `app/` with Ollama running and a few Entries in `%APPDATA
 
 - [ ] `npm run lint` and `npm run typecheck` pass in `app/`.
 - [ ] The History window lists the Entries newest first under Today, Yesterday and dated labels, and each day label sticks to the top while its group scrolls.
-- [ ] Each Entry shows its Cleaned text clamped to two lines, the time, the Target app, and Copy. Delete appears only on row hover or when Tab reaches the row, and nothing in the row shifts when it does.
+- [ ] Each Entry shows its Cleaned text clamped to two lines, the time, the Target app, and Copy. Delete appears only on row hover or when keyboard focus reaches the row, and nothing in the row shifts when it does.
 - [ ] A long Entry has Show all; a short one doesn't. Clicking the text or Show all expands it; Show less clamps it again. Drag-selecting part of the text selects it and doesn't expand or clamp.
 - [ ] Copy shows "Copied" in blue for about 1.4 s. Paste into Notepad: the text matches the Entry, with no trailing space.
 - [ ] Delete removes the row at once with a quick collapse and no confirmation. Click Delete twice quickly without moving the mouse: only one Entry goes. Restart the App: the deleted Entry stays gone.
 - [ ] Hover the "uncleaned" tag: its tooltip reads "Cleanup didn't finish, so this is the raw transcript."
 - [ ] With the History window open, dictate a sentence into Notepad: its Entry appears at the top under Today without reopening the window.
 - [ ] Narrow the window to its smallest: the time, Target app and tag wrap, and Copy and Delete stay in view.
-- [ ] With Narrator on, Tab to Copy and Delete: each is read with the start of its Entry, like "Copy: Sounds good, see you at 4pm."
+- [ ] With Narrator on, Tab to Copy, then press Right to reach Delete: each is read with the start of its Entry, like "Copy: Sounds good, see you at 4pm."
 - [ ] Rename `history.db` while the App is closed, then start it: the window shows one line, "Hold Right Ctrl and speak", with the key in a key cap. Rename it back afterwards.
+
+## History search and keyboard (T8b)
+
+Run `npm run dev` from `app/` with Ollama running and Entries as for T8a, including one long Entry whose last few words appear nowhere near its start, and more than 200 Entries in all (dictate or insert rows; see T4b).
+
+- [ ] `npm run lint` and `npm run typecheck` pass in `app/`.
+- [ ] The search box sits at the top with "Search history" and has focus when the window opens. Close the window, open it again from the tray: search has focus again. Minimize and restore: the same.
+- [ ] Type part of a word in mixed case: only Entries containing it show, with every match in blue.
+- [ ] Search for words at the end of the long Entry: its row starts with "…" a few words before the match, and the match is visible without Show all. Show all shows the whole text with the match still blue.
+- [ ] Search for a word only in an Entry older than the newest 200: it shows.
+- [ ] Search for something you never said: one line reads "Nothing matches" and the query, with no picture.
+- [ ] Type quickly, then stop: the list matches the final query, not an earlier one.
+- [ ] With a query typed, dictate a sentence that matches it: it appears at the top. Dictate one that doesn't: it doesn't appear, and it shows once the search is cleared.
+- [ ] Tab from search lands on one Entry's Copy, and its row fills. Up and Down move between Entries across day labels, and the row stays clear of the sticky label. Left and Right reach Show all and Delete in that row. Tab again leaves the list; Shift+Tab comes back to the same Entry.
+- [ ] Enter on Copy shows "Copied" in blue and Narrator says "Copied"; paste in Notepad gives the Entry's text.
+- [ ] Pressing the Delete key on a focused Entry does nothing.

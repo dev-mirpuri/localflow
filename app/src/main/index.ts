@@ -118,6 +118,7 @@ function createHistory(): void {
   history.webContents.on('did-finish-load', () => {
     if (config) history.webContents.send('event', config)
   })
+  history.on('restore', showSearch) // From the taskbar, which doesn't go through openHistory.
   history.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
@@ -150,6 +151,12 @@ function openHistory(): void {
   if (history.isMinimized()) history.restore()
   history.show()
   history.focus()
+  showSearch()
+}
+
+// The History page focuses search each time the window is shown.
+function showSearch(): void {
+  history.webContents.send('event', { type: 'shown' })
 }
 
 if (!app.requestSingleInstanceLock()) {
