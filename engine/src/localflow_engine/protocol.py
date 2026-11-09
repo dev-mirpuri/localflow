@@ -2,8 +2,8 @@
 
 import json
 import logging
+import os
 import sqlite3
-import sys
 import threading
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -15,12 +15,14 @@ lock = threading.Lock()  # The mic, the dictation loop and serve() all send.
 
 
 def send(message: dict) -> None:
-    """Writes to the real stdout: the Engine points sys.stdout at stderr for stray prints."""
-    stdout = sys.__stdout__
-    assert stdout is not None
+    """Writes to fd 1 directly: the Engine points sys.stdout at stderr for stray prints.
+
+    os.write, not sys.__stdout__, because a console stream can't write once fd 1 is a file.
+    """
+    data = (json.dumps(message) + "\n").encode("ascii")
     with lock:
-        stdout.write(json.dumps(message) + "\n")
-        stdout.flush()
+        while data:
+            data = data[os.write(1, data) :]
 
 
 def serve(
