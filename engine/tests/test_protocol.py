@@ -1,13 +1,16 @@
 import json
 import sys
 
-from localflow_engine import history, protocol
+from localflow_engine import config, history, protocol
 
 
-def serve(capfd, data_dir, *lines: dict | str, commands: list | None = None) -> list[dict]:
+def serve(
+    capfd, data_dir, *lines: dict | str, commands: list | None = None, settings=config.DEFAULTS
+) -> list[dict]:
     """Runs the protocol loop over these lines, then reads stdout back as JSON lines."""
     sent = [line if isinstance(line, str) else json.dumps(line) + "\n" for line in lines]
-    protocol.serve(iter(sent), data_dir, (commands if commands is not None else []).append)
+    command = (commands if commands is not None else []).append
+    protocol.serve(iter(sent), data_dir, settings, command)
     return [json.loads(line) for line in capfd.readouterr().out.splitlines()]
 
 
@@ -23,6 +26,14 @@ def save(data_dir, *clean_texts: str) -> list[int]:
 def test_config_is_sent_at_startup_with_the_defaults(capfd, tmp_path):
     assert serve(capfd, tmp_path) == [
         {"type": "config", "hotkey": "right ctrl", "launch_at_login": False}
+    ]
+
+
+def test_config_reports_the_configured_hotkey_and_launch_at_login(capfd, tmp_path):
+    settings = {**config.DEFAULTS, "hotkey": "left shift", "launch_at_login": True}
+
+    assert serve(capfd, tmp_path, settings=settings) == [
+        {"type": "config", "hotkey": "left shift", "launch_at_login": True}
     ]
 
 

@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Callable
 
 import ollama
 
@@ -19,6 +20,8 @@ MIN_OVERLAP = 0.8
 MIN_LENGTH = 0.6
 MAX_LENGTH = 1.3
 LIST_NUMBER = re.compile(r"(?m)^\s*\d+\.\s")
+OLLAMA_DOWN = "Ollama isn't running. Start Ollama and try again."
+MISSING = 'The cleanup model is missing. Run "ollama pull {}" and try again.'
 
 FILLER = re.compile(r"(?<![\w'-])(?:(?i:um|uh|erm)|er)(?![\w'-]),?\s*")
 # What deleting a filler can strand: "then, ." and ". Okay" or "Okay. . Right".
@@ -81,14 +84,14 @@ def prepass(text: str) -> str:
     return " ".join(STRANDED_ALONE.sub("", text).split())
 
 
-def call_model(text: str, timeout: float) -> str:
+def call_model(text: str, timeout: float, model: str) -> str:
     messages = [{"role": "system", "content": PROMPT}]
     for spoken, cleaned in EXAMPLES:
         messages.append({"role": "user", "content": f"<transcript>{spoken}</transcript>"})
         messages.append({"role": "assistant", "content": cleaned})
     messages.append({"role": "user", "content": f"<transcript>{text}</transcript>"})
     reply = ollama.Client(timeout=timeout).chat(
-        model=MODEL,
+        model=model,
         messages=messages,
         think=False,
         keep_alive=-1,
@@ -129,43 +132,68 @@ def split_chunks(transcript: str) -> list[str]:
     return chunks
 
 
-def clean_chunk(text: str) -> str | None:
-    """Returns the model's output for pre-passed text, or None if it can't be used."""
+def problem(error: Exception, model: str) -> str | None:
+    """The Oval error for Ollama being down or the model missing; None for anything else."""
+    if isinstance(error, ConnectionError):  # What ollama raises when it can't connect.
+        return OLLAMA_DOWN
+    if isinstance(error, ollama.ResponseError) and error.status_code == 404:
+        return MISSING.format(model)
+    return None
+
+
+def clean_chunk(text: str, model: str) -> tuple[str | None, str | None]:
+    """Returns the model's output for pre-passed text, or None if it can't be used, and why."""
     try:
-        output = call_model(text, TIMEOUT_S + TIMEOUT_S_PER_WORD * len(words(text)))
+        output = call_model(text, TIMEOUT_S + TIMEOUT_S_PER_WORD * len(words(text)), model)
     except Exception as error:  # Whatever went wrong, the words must survive it.
         log.warning("raw fallback after %s", type(error).__name__)
-        return None
+        return None, problem(error, model)
     if not passes_rejection(output, text):
         log.warning("raw fallback after rejected output")
-        return None
-    return output
+        return None, None
+    return output, None
 
 
-def clean(transcript: str) -> tuple[str, str]:
-    """Returns Cleaned text and a status of ok or raw_fallback. Empty text means only filler."""
+def clean(
+    transcript: str, model: str = MODEL, report: Callable[[str], None] = lambda message: None
+) -> tuple[str, str]:
+    """Returns Cleaned text and a status of ok or raw_fallback. Empty text means only filler.
+
+    report() gets the Oval error, once, if Ollama is down or the model is missing.
+    """
     text = prepass(transcript)
     if not words(text):
         return "", "ok"
     if len(words(text)) <= SHORT_WORDS:
         return text[0].upper() + text[1:], "ok"
-    results, status = [], "ok"
+    results, status, problems = [], "ok", []
     for chunk in split_chunks(transcript):
         text = prepass(chunk)
         if not words(text):
             continue
-        output = clean_chunk(text)
+        output, why = clean_chunk(text, model)
         if output is None:
             status = "raw_fallback"
+        if why and why not in problems:
+            problems.append(why)
+            report(why)
         results.append(chunk if output is None else output)
     return " ".join(results), status
 
 
-def unload_cleanup() -> None:
+def unload_cleanup(model: str) -> None:
     """Frees the model's VRAM: a request with keep_alive=0 and no prompt unloads it."""
-    ollama.Client(timeout=UNLOAD_TIMEOUT_S).generate(model=MODEL, keep_alive=0)
+    ollama.Client(timeout=UNLOAD_TIMEOUT_S).generate(model=model, keep_alive=0)
 
 
-def warm_up_cleanup() -> None:
-    """Loads the model and keeps it loaded, since loading takes longer than a chunk's timeout."""
-    call_model("warm up", WARM_UP_TIMEOUT_S)
+def warm_up_cleanup(model: str, report: Callable[[str], None]) -> None:
+    """Loads the model and keeps it loaded, since loading takes longer than a chunk's timeout.
+
+    On failure, cleanup falls back to the Transcript by itself; report() gets any Oval error.
+    """
+    try:
+        call_model("warm up", WARM_UP_TIMEOUT_S, model)
+    except Exception as error:
+        log.warning("cleanup warm-up failed with %s", type(error).__name__)
+        if why := problem(error, model):
+            report(why)

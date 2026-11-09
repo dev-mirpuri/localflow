@@ -10,8 +10,6 @@ from pathlib import Path
 
 from localflow_engine import history
 
-HOTKEY = "right ctrl"  # Until T9 adds the config file.
-
 log = logging.getLogger(__name__)
 lock = threading.Lock()  # The mic, the dictation loop and serve() all send.
 
@@ -25,9 +23,13 @@ def send(message: dict) -> None:
         stdout.flush()
 
 
-def serve(lines: Iterable[str], data_dir: Path, command: Callable[[str], None]) -> None:
+def serve(
+    lines: Iterable[str], data_dir: Path, config: dict, command: Callable[[str], None]
+) -> None:
     """Sends config, then answers requests and passes on commands until stdin closes."""
-    send({"type": "config", "hotkey": HOTKEY, "launch_at_login": False})
+    send(
+        {"type": "config", "hotkey": config["hotkey"], "launch_at_login": config["launch_at_login"]}
+    )
     db = history.open_history(data_dir / "history.db")
     for line in lines:
         try:

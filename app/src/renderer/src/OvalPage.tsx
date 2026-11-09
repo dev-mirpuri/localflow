@@ -13,6 +13,7 @@ const STARTUP: Record<string, string> = {
 // because the Engine starts once the page has loaded and may send "downloading" at once.
 let view = { state: 'idle', error: null as string | null }
 let errorTimer: number | undefined
+let waiting: string[] = [] // Errors sent while another shows, such as several at startup.
 const viewListeners = new Set<() => void>()
 
 function setView(next: typeof view): void {
@@ -20,15 +21,26 @@ function setView(next: typeof view): void {
   viewListeners.forEach((listener) => listener())
 }
 
+function showError(error: string | null): void {
+  clearTimeout(errorTimer)
+  if (error)
+    errorTimer = window.setTimeout(() => showError(waiting.shift() ?? null), ERROR_SHOWN_MS)
+  setView({ ...view, error })
+}
+
 bridge.onEvent((message) => {
   if (message.type === 'error') {
-    clearTimeout(errorTimer)
-    errorTimer = window.setTimeout(() => setView({ ...view, error: null }), ERROR_SHOWN_MS)
-    setView({ ...view, error: String(message.message) })
+    const error = String(message.message)
+    if (view.error && view.error !== error) {
+      if (!waiting.includes(error)) waiting.push(error)
+    } else showError(error) // The same one again restarts its timer.
   } else if (message.type === 'state') {
     // An error stays readable through the idle that follows it; any other state replaces it.
     const state = String(message.state)
-    if (state !== 'idle') clearTimeout(errorTimer)
+    if (state !== 'idle') {
+      clearTimeout(errorTimer)
+      waiting = []
+    }
     setView({ state, error: state === 'idle' ? view.error : null })
   }
 })

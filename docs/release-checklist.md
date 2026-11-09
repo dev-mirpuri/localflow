@@ -96,3 +96,22 @@ Run `npm run dev` from `app/` with Ollama running and Entries as for T8a, includ
 - [ ] Type a query, press Down, then Enter: the first matching Entry shows "Copied" without a Tab. Down with no matches does nothing.
 - [ ] Enter on Copy shows "Copied" in blue and Narrator says "Copied"; paste in Notepad gives the Entry's text.
 - [ ] Pressing the Delete key on a focused Entry does nothing.
+
+## Config and clear errors (T9)
+
+Quit any installed copy, then run `npm run dev` from `app/` with Ollama running. The config file is `%APPDATA%\LocalFlow Dev\config.json`; keep a copy of yours and put it back afterwards. Restart the App after each edit. Each error below shows on the Oval in plain words on one line, is fully readable (no "…" at the end), then hides after about 4 s. If two show at once, they appear one after the other.
+
+- [ ] `npm run lint` and `npm run typecheck` pass in `app/`, and `uv run pytest` passes in `engine/`.
+- [ ] Delete `config.json`, then start the App: it's created with `"hotkey": "right ctrl"`, `"microphone": ""`, `"cleanup_model": "qwen3:1.7b"` and `"launch_at_login": false`. Edit it, restart: your edits are still there.
+- [ ] Set `"hotkey": "F8"`: F8 dictates and Right Ctrl doesn't, and the empty History state reads "Hold F8 and speak". Repeat with `"left shift"`.
+- [ ] Set `"hotkey": "right alt"`, then `"win"`: "config.json: "hotkey" isn't valid, so it uses Right Ctrl. Set a Ctrl, Shift or F-key." shows at startup, and Right Ctrl dictates. Set `"launch_at_login": "yes"`: a message naming `"launch_at_login"` shows, and only that value goes back to its default.
+- [ ] Break the JSON (delete a closing brace): "config.json isn't valid JSON, so it uses the defaults. Fix it and restart." shows, Right Ctrl dictates, and the file is unchanged.
+- [ ] `engine.log` lists the input devices. Set `"microphone"` to part of one that isn't the default: dictation records from it. Set it to `"nothing like this"`: "Microphone not found. Copy a name from engine.log into config.json." shows, and dictation uses the default mic.
+- [ ] Disable every microphone in Sound settings: at startup and on each press, "No microphone found. Plug one in, or fix its name in config.json." shows, and the next press after re-enabling one records.
+- [ ] Set `"cleanup_model": "qwen3:0.6b-missing"`: "The cleanup model is missing. Run "ollama pull qwen3:0.6b-missing" and try again." shows at startup and after a dictation longer than three words, and the raw text is still pasted and saved as `raw_fallback`.
+- [ ] Quit Ollama (tray icon > Quit), then start the App: "Ollama isn't running. Start Ollama and try again." shows at startup. Dictate a long sentence: the same message shows, and the raw text is pasted and saved as `raw_fallback`. Start Ollama again: the next dictation is cleaned with no error.
+- [ ] Make a dictation fail to transcribe (for example, fill the VRAM by running a large model with `ollama run` before dictating a long sentence): "Couldn't transcribe that, so it's kept in last-failed.wav. Try again." shows and `last-failed.wav` is in the data folder.
+- [ ] Rename `nvidia-smi.exe` in `C:\Windows\System32` (needs admin; rename it back after): "LocalFlow needs an NVIDIA GPU with 6 GB and a working driver. Update the driver and restart." shows at startup and on every press, nothing records, and History still opens and searches.
+- [ ] In PowerShell, `$env:CUDA_VISIBLE_DEVICES = "-1"; npm run dev` (then close that window): "The GPU isn't available. Update the NVIDIA driver and restart LocalFlow." shows at startup and on every press, and nothing records.
+- [ ] Rename the Parakeet folder (see T7) and start the App offline: after "Downloading speech model…", "The speech model didn't load. Check your internet and restart LocalFlow." shows, and again on every press instead of "Starting up…".
+- [ ] Set `"launch_at_login": true`: the `npm run dev` console logs "not packaged, so no login item; would set" with `openAtLogin: true` and `--login`, and no LocalFlow entry appears in Task Manager > Startup apps. The real login item and the tray-only start are checked with the installer in T10.
