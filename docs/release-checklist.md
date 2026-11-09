@@ -77,7 +77,7 @@ Run `npm run dev` from `app/` with Ollama running and a few Entries in `%APPDATA
 - [ ] Hover the "uncleaned" tag: its tooltip reads "Cleanup didn't finish, so this is the raw transcript."
 - [ ] With the History window open, dictate a sentence into Notepad: its Entry appears at the top under Today without reopening the window.
 - [ ] Narrow the window to its smallest: the time, Target app and tag wrap, and Copy and Delete stay in view.
-- [ ] With Narrator on, Tab to Copy, then press Right to reach Delete: each is read with the start of its Entry, like "Copy: Sounds good, see you at 4pm."
+- [ ] With Narrator on, Tab to Copy, then use Narrator's scan mode to reach Delete: each is read with the start of its Entry, like "Copy: Sounds good, see you at 4pm."
 - [ ] Rename `history.db` while the App is closed, then start it: the window shows one line, "Hold Right Ctrl and speak", with the key in a key cap. Rename it back afterwards.
 
 ## History search and keyboard (T8b)
@@ -92,6 +92,7 @@ Run `npm run dev` from `app/` with Ollama running and Entries as for T8a, includ
 - [ ] Search for something you never said: one line reads "Nothing matches" and the query, with no picture.
 - [ ] Type quickly, then stop: the list matches the final query, not an earlier one.
 - [ ] With a query typed, dictate a sentence that matches it: it appears at the top. Dictate one that doesn't: it doesn't appear, and it shows once the search is cleared.
-- [ ] Tab from search lands on one Entry's Copy, and its row fills. Up and Down move between Entries across day labels, and the row stays clear of the sticky label. Left and Right reach Show all and Delete in that row. Tab again leaves the list; Shift+Tab comes back to the same Entry.
+- [ ] Tab from search lands on one Entry's Copy, and its row fills. Up and Down move between Entries across day labels, and the row stays clear of the sticky label. Left and Right do nothing, and Show all and Delete are never reached by Tab or arrows. Tab again leaves the list; Shift+Tab comes back to the same Entry.
+- [ ] Type a query, press Down, then Enter: the first matching Entry shows "Copied" without a Tab. Down with no matches does nothing.
 - [ ] Enter on Copy shows "Copied" in blue and Narrator says "Copied"; paste in Notepad gives the Entry's text.
 - [ ] Pressing the Delete key on a focused Entry does nothing.

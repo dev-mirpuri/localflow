@@ -91,21 +91,15 @@ function marked(text: string, query: string): React.ReactNode[] {
   return parts
 }
 
-// The list is one Tab stop: Up and Down move between Entries' Copy, Left and Right
-// between the focused Entry's actions, and Enter presses the focused action.
+// The list is one Tab stop on an Entry's Copy, so Enter copies it. Up and Down move
+// between Entries; Show all and Delete stay pointer-only, so Enter can't delete.
 function onListKey(event: React.KeyboardEvent<HTMLElement>): void {
-  const target = event.target as HTMLElement
-  const row = target.closest('li')
-  const step = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -1, ArrowRight: 1 }[event.key]
+  const row = (event.target as HTMLElement).closest('li')
+  const step = { ArrowUp: -1, ArrowDown: 1 }[event.key]
   if (!row || !step) return
   event.preventDefault() // Arrows don't scroll the list as well.
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    const actions = [...row.querySelectorAll('button')]
-    actions[actions.indexOf(target as HTMLButtonElement) + step]?.focus()
-  } else {
-    const rows = [...event.currentTarget.querySelectorAll('li:not([inert])')]
-    rows[rows.indexOf(row) + step]?.querySelector<HTMLElement>('[id^="copy-"]')?.focus()
-  }
+  const rows = [...event.currentTarget.querySelectorAll('li:not([inert])')]
+  rows[rows.indexOf(row) + step]?.querySelector<HTMLElement>('[id^="copy-"]')?.focus()
 }
 
 export default function HistoryPage(): React.JSX.Element {
@@ -198,6 +192,11 @@ export default function HistoryPage(): React.JSX.Element {
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown' || !listed[0]) return
+            event.preventDefault() // Type, Down, Enter copies the first Entry.
+            document.getElementById(`copy-${listed[0].id}`)?.focus()
+          }}
           placeholder="Search history"
           aria-label="Search history"
           className="h-9 w-full rounded-lg border border-line bg-raised pr-3 pl-8.5 text-sm caret-primary outline-none [color-scheme:dark] placeholder:text-dim focus:border-primary"
