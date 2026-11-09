@@ -20,19 +20,23 @@ let quitting = false
 let nextId = 1
 let config: EngineMessage | null = null // Sent once at startup; a History page loaded later needs it.
 const replies = new Map<number, (data: unknown) => void>()
+const dataDir = join(app.getPath('appData'), app.isPackaged ? 'LocalFlow' : 'LocalFlow Dev')
+// Keeps Chromium's files out of the top of the data folder, next to history.db.
+app.setPath('userData', join(dataDir, 'electron'))
 
 function startEngine(): void {
-  const dataDir = join(app.getPath('appData'), app.isPackaged ? 'LocalFlow' : 'LocalFlow Dev')
-  const project = join(app.getAppPath(), '..', 'engine') // T10 swaps in the bundled exe.
-  const child = spawn(
-    'uv',
-    ['run', '--project', project, 'localflow-engine', 'dictate', '--data-dir', dataDir],
-    {
-      stdio: ['pipe', 'pipe', 'inherit'],
-      windowsHide: true
-    }
-  )
-  child.on('error', engineStopped) // For example, uv isn't installed.
+  const args = ['dictate', '--data-dir', dataDir]
+  const [command, commandArgs] = app.isPackaged
+    ? [join(process.resourcesPath, 'engine', 'localflow-engine.exe'), args]
+    : [
+        'uv',
+        ['run', '--project', join(app.getAppPath(), '..', 'engine'), 'localflow-engine', ...args]
+      ]
+  const child = spawn(command, commandArgs, {
+    stdio: ['pipe', 'pipe', 'inherit'],
+    windowsHide: true
+  })
+  child.on('error', engineStopped) // For example, uv isn't installed, or the exe is missing.
   child.on('close', engineStopped) // After stdout ends, so no last line arrives after it.
   child.stdin.on('error', () => {}) // A write after a crash; 'close' reports the crash.
   createInterface({ input: child.stdout }).on('line', onEngineLine)
@@ -49,7 +53,7 @@ function engineStopped(): void {
   }
 }
 
-// From source there's no installed exe to register, so it only says what it would do (T10 tests it).
+// From source there's no installed exe to register, so it only says what it would do.
 function followLaunchAtLogin(openAtLogin: boolean): void {
   const settings = { openAtLogin, args: [AT_LOGIN] }
   if (app.isPackaged) app.setLoginItemSettings(settings)

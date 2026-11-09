@@ -5,6 +5,7 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 engine/build/
+engine/dist/
 *.egg-info/
 
 # Node and Electron

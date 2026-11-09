@@ -5,13 +5,16 @@ from pathlib import Path
 import pytest
 
 AUDIO = Path(__file__).resolve().parents[2] / "eval" / "audio"
+PACKAGED = (
+    Path(__file__).resolve().parents[1] / "dist" / "localflow-engine" / "localflow-engine.exe"
+)
 
 pytestmark = pytest.mark.gpu
 
 
-def run_transcribe(path: Path) -> subprocess.CompletedProcess[str]:
+def run_transcribe(path: Path, exe: str = "localflow-engine") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["localflow-engine", "transcribe", str(path)],
+        [exe, "transcribe", str(path)],
         capture_output=True,
         encoding="utf-8",
         check=True,
@@ -27,6 +30,17 @@ def test_prints_transcript_to_stdout_and_timings_to_stderr() -> None:
     assert "warm-up" in result.stderr
     assert "transcribe" in result.stderr
     assert "proposal" not in result.stderr
+
+
+def test_packaged_engine_transcribes_on_the_gpu() -> None:
+    # load_speech() raises if Parakeet lands on the CPU, so a transcript means CUDA.
+    assert PACKAGED.exists(), "build it first: npm --prefix app run build:win"
+
+    result = run_transcribe(AUDIO / "01.wav", str(PACKAGED))
+
+    assert result.stdout.strip() == (
+        "I looked over the proposal this morning and it seems fine to me."
+    )
 
 
 def test_transcribes_a_recording_over_20_seconds(tmp_path: Path) -> None:

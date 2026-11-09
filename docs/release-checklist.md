@@ -115,3 +115,21 @@ Quit any installed copy, then run `npm run dev` from `app/` with Ollama running.
 - [ ] In PowerShell, `$env:CUDA_VISIBLE_DEVICES = "-1"; npm run dev` (then close that window): "The GPU isn't available. Update the NVIDIA driver and restart LocalFlow." shows at startup and on every press, and nothing records.
 - [ ] Rename the Parakeet folder (see T7) and start the App offline: after "Downloading speech model…", "The speech model didn't load. Check your internet and restart LocalFlow." shows, and again on every press instead of "Starting up…".
 - [ ] Set `"launch_at_login": true`: the `npm run dev` console logs "not packaged, so no login item; would set" with `openAtLogin: true` and `--login`, and no LocalFlow entry appears in Task Manager > Startup apps. The real login item and the tray-only start are checked with the installer in T10.
+
+## Installer (T10)
+
+On `main`, run `npm --prefix app run build:win` from the repo root. Then, on a Windows account that has never run LocalFlow (Settings > Accounts > Other users), with Ollama installed and `qwen3:1.7b` pulled. Time it from opening the installer.
+
+- [ ] `uv run pytest -m gpu` passes in `engine/`, including `test_packaged_engine_transcribes_on_the_gpu`.
+- [ ] `app\dist\LocalFlow-<version>-setup.exe` is under 2 GB.
+- [ ] Running it shows SmartScreen's "Windows protected your PC"; More info, then Run anyway installs it with no further prompts, to `%LOCALAPPDATA%\Programs\localflow`, with a LocalFlow shortcut on the desktop and in the Start menu.
+- [ ] LocalFlow starts after installing, with its tray icon. "Downloading speech model…" shows while Parakeet downloads, then dictation works.
+- [ ] **Install to first dictation takes 10 minutes or less**, following only the README.
+- [ ] Task Manager shows `localflow-engine.exe` under LocalFlow, and no `uv.exe` or `python.exe`.
+- [ ] `%APPDATA%\LocalFlow` holds `config.json`, `engine.log`, `history.db` and an `electron` folder, and nothing else.
+- [ ] With both models loaded after a dictation, `nvidia-smi` shows the GPU's memory in use at or under about 5 GB more than before LocalFlow started.
+- [ ] Rerun the T4a, T7, T8a, T8b and T9 checks on the installed app, with `%APPDATA%\LocalFlow` as the data folder.
+- [ ] Set `"launch_at_login": true` and restart LocalFlow: Task Manager > Startup apps lists LocalFlow. Sign out and in: LocalFlow starts in the tray with no History window, and dictation works. Set it back to `false` and restart: the Startup apps entry goes.
+- [ ] Quit from the tray: no `localflow-engine.exe` is left, and `ollama ps` no longer lists the cleanup model.
+- [ ] With the installed copy still running, `npm run dev` from `app/` would double the Hotkey, so quit it first, as the README says.
+- [ ] Uninstall from Settings > Apps: `%LOCALAPPDATA%\Programs\localflow` is gone; `%APPDATA%\LocalFlow` stays.
