@@ -9,13 +9,24 @@ const CYCLE: EngineMessage[] = [
   { type: 'state', state: 'idle' }
 ]
 
+// Times are relative to now so the day labels show Today, Yesterday and a date.
+// Open the page with ?empty for the empty state.
+const ago = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString()
+const LONG =
+  "Here's the plan for Thursday. First we freeze the release branch in the morning, then " +
+  'run the full checklist on a clean machine, and if anything fails we fix it on dev before ' +
+  "promoting. I'll write up the notes afterwards and send them round to everyone."
 let entries = [
-  [1, '2026-11-08T09:12:00+00:00', 'Sounds good, see you at 4pm.', 'slack.exe', 'ok'],
-  [2, '2026-11-08T08:40:00+00:00', 'Remember to update the release checklist.', 'code.exe', 'ok'],
-  [3, '2026-11-07T17:05:00+00:00', 'um so the build is green now', 'chrome.exe', 'raw_fallback']
-].map(([id, created_at, clean_text, target_app, status]) => {
-  return { id, created_at, raw_text: clean_text, clean_text, target_app, status }
-})
+  [1, ago(0.2), 'Sounds good, see you at 4pm.', 'slack.exe', 'ok'],
+  [2, ago(1), LONG, 'outlook.exe', 'ok'],
+  [3, ago(25), 'Remember to update the release checklist.', 'code.exe', 'ok'],
+  [4, ago(26), 'um so the build is green now', 'chrome.exe', 'raw_fallback'],
+  [5, ago(75), 'Running ten minutes late, start without me.', 'slack.exe', 'ok']
+]
+  .map(([id, created_at, clean_text, target_app, status]) => {
+    return { id, created_at, raw_text: clean_text, clean_text, target_app, status }
+  })
+  .filter(() => !location.search.includes('empty'))
 
 function fakeBridge(): LocalFlow {
   const listeners = new Set<(message: EngineMessage) => void>()

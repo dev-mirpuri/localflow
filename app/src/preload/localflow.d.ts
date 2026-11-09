@@ -7,7 +7,8 @@ declare global {
     onEvent(callback: (message: EngineMessage) => void): () => void
     request(method: string, params: Record<string, unknown>): Promise<unknown>
     command(name: 'finish' | 'cancel'): void
-    copy(text: string): void
+    /** Resolves once the text is on the clipboard. */
+    copy(text: string): Promise<void>
     /** Shows the Oval window around a pill this wide, or hides it when null. */
     showOval(pill: { width: number; clickable: boolean } | null): void
   }
